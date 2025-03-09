@@ -28,8 +28,8 @@ from recur_scan.transactions import group_transactions, read_labeled_transaction
 n_cv_folds = 3  # number of cross-validation folds, could be 5
 n_hpo_iters = 20  # number of hyperparameter optimization iterations
 
-in_path = "your csv file goes here"
-out_dir = "your output directory goes here"
+in_path = "C:/Users/User/Downloads/laurels_22.csv"
+out_dir = "C:/Users/User/Downloads/output"
 
 # %%
 # parse script arguments from command line
@@ -41,8 +41,13 @@ args = parser.parse_args()
 in_path = args.input
 out_dir = args.output
 
+# %%
 # Create output directory if it doesn't exist
-os.makedirs(out_dir, exist_ok=True)
+if not os.path.exists(out_dir):
+    os.makedirs(out_dir)
+    logger.info(f"Created output directory: {out_dir}")
+else:
+    logger.info(f"Output directory already exists: {out_dir}")
 
 # %%
 #
