@@ -45,7 +45,7 @@ The system processes transaction data from multiple sources, extracts relevant f
 
 #### or
 
-`source .venv/bin/activate` # activate the virtual environment
+`source .venv/Scripts/activate` # activate the virtual environment
 
 `python scripts/<script_name>.py` # run the script
 

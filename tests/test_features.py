@@ -1,155 +1,132 @@
-import pytest
+from datetime import datetime
 
 from recur_scan.features import (
-    average_transaction_amount,
-    get_day,
-    get_day_of_week,
-    get_month,
-    get_n_transactions_same_amount,
-    get_percent_transactions_same_amount,
-    identical_transaction_ratio,
-    is_fixed_interval,
-    is_large_transaction,
-    is_monthly_recurring,
-    is_price_increasing,
-    is_start_or_end_of_month,
-    median_transaction_interval,
-    most_common_transaction_day,
-    normalized_transaction_frequency,
-    standard_deviation_of_transaction_amount,
-    subscription_price_consistency,
-    test_get_n_transactions_same_amount,
-    test_get_percent_transactions_same_amount,
-    time_since_last_transaction,
-    time_since_last_transaction_same_amount,
-    transaction_amount_ratio,
-    transaction_frequency,
-    transaction_time_fourier,
+    _aggregate_transactions,
+    _parse_date,
+    day_consistency_score_feature,
+    get_features,
+    identical_transaction_ratio_feature,
+    is_deposit_feature,
+    is_monthly_recurring_feature,
+    is_near_periodic_interval_feature,
+    is_varying_amount_recurring_feature,
+    low_amount_variation_feature,
+    merchant_amount_std_feature,
+    merchant_interval_mean_feature,
+    merchant_interval_std_feature,
+    n_transactions_same_amount_feature,
+    percent_transactions_same_amount_feature,
+    recurrence_likelihood_feature,
+    time_since_last_transaction_same_merchant_feature,
 )
 from recur_scan.transactions import Transaction
 
 
-@pytest.fixture
-def transactions():
-    """Fixture providing test transactions."""
-    return [
-        Transaction(id=1, user_id="user1", name="vendor1", amount=100.0, date="2024-01-01"),
-        Transaction(id=2, user_id="user1", name="vendor1", amount=100.0, date="2024-01-02"),
-        Transaction(id=3, user_id="user1", name="vendor1", amount=200.0, date="2024-01-03"),
-        Transaction(id=4, user_id="user2", name="vendor2", amount=200.0, date="2024-01-04"),
-        Transaction(id=5, user_id="user1", name="vendor1", amount=100.0, date="2024-01-08"),
-        Transaction(id=6, user_id="user1", name="vendor1", amount=100.0, date="2024-01-15"),
-        Transaction(id=7, user_id="user1", name="vendor1", amount=100.0, date="2024-01-22"),
-        Transaction(id=8, user_id="user1", name="vendor1", amount=200.0, date="2024-01-29"),
+def test_parse_date_valid():
+    assert _parse_date("2025-03-17") == datetime(2025, 3, 17)
+
+
+def test_parse_date_invalid():
+    assert _parse_date("invalid-date") is None
+
+
+def test_aggregate_transactions():
+    transactions = [Transaction(user_id="1", name="MerchantA"), Transaction(user_id="1", name="MerchantB")]
+    aggregated = _aggregate_transactions(transactions)
+    assert "1" in aggregated
+    assert "MerchantA" in aggregated["1"]
+
+
+def test_n_transactions_same_amount_feature():
+    transaction = Transaction(user_id="1", amount=100.0)
+    all_transactions = [Transaction(user_id="1", amount=100.0), Transaction(user_id="2", amount=100.0)]
+    amount_counts = {100.0: 2}
+    assert n_transactions_same_amount_feature(transaction, all_transactions, amount_counts) == 2
+
+
+def test_percent_transactions_same_amount_feature():
+    transaction = Transaction(user_id="1", amount=100.0)
+    all_transactions = [Transaction(user_id="1", amount=100.0), Transaction(user_id="2", amount=200.0)]
+    amount_counts = {100.0: 1, 200.0: 1}
+    assert percent_transactions_same_amount_feature(transaction, all_transactions, amount_counts) == 0.5
+
+
+def test_identical_transaction_ratio_feature():
+    transaction = Transaction(user_id="1", amount=100.0)
+    all_transactions = [Transaction(user_id="1", amount=100.0), Transaction(user_id="1", amount=100.0)]
+    merchant_trans = [Transaction(user_id="1", amount=100.0), Transaction(user_id="1", amount=200.0)]
+    assert identical_transaction_ratio_feature(transaction, all_transactions, merchant_trans) == 0.5
+
+
+def test_is_monthly_recurring_feature():
+    merchant_trans = [
+        Transaction(user_id="1", date="2025-01-01"),
+        Transaction(user_id="1", date="2025-01-15"),
+        Transaction(user_id="1", date="2025-01-30"),
     ]
+    assert is_monthly_recurring_feature(merchant_trans) == 1
 
 
-def test_get_n_transactions_same_amount(transactions) -> None:
-    transaction = transactions[0]
-    assert get_n_transactions_same_amount(transaction, transactions) == 3
+def test_recurrence_likelihood_feature():
+    merchant_trans = [Transaction(user_id="1", amount=100.0)] * 5
+    interval_stats = {"mean": 30, "std": 5}
+    amount_stats = {"mean": 100.0, "std": 10.0}
+    assert 0 <= recurrence_likelihood_feature(merchant_trans, interval_stats, amount_stats) <= 1
 
 
-def test_get_percent_transactions_same_amount(transactions) -> None:
-    transaction = transactions[0]
-    assert pytest.approx(get_percent_transactions_same_amount(transaction, transactions)) == 3 / 8
+def test_is_varying_amount_recurring_feature():
+    interval_stats = {"mean": 30, "std": 5}
+    amount_stats = {"mean": 100.0, "std": 15.0}
+    assert is_varying_amount_recurring_feature(interval_stats, amount_stats) == 1
 
 
-def test_get_day_of_week(transactions) -> None:
-    transaction = transactions[0]
-    assert get_day_of_week(transaction) == "Monday"
+def test_day_consistency_score_feature():
+    merchant_trans = [
+        Transaction(user_id="1", date="2025-03-01"),
+        Transaction(user_id="1", date="2025-03-08"),
+        Transaction(user_id="1", date="2025-03-15"),
+    ]
+    assert 0 <= day_consistency_score_feature(merchant_trans) <= 1
 
 
-def test_get_month(transactions) -> None:
-    transaction = transactions[0]
-    assert get_month(transaction) == 1
+def test_is_near_periodic_interval_feature():
+    interval_stats = {"mean": 30, "std": 5}
+    assert is_near_periodic_interval_feature(interval_stats) == 1
 
 
-def test_get_day(transactions) -> None:
-    transaction = transactions[0]
-    assert get_day(transaction) == 1
+def test_merchant_amount_std_feature():
+    amount_stats = {"mean": 100.0, "std": 10.0}
+    assert merchant_amount_std_feature(amount_stats) == 0.1
 
 
-def test_time_since_last_transaction(transactions) -> None:
-    transaction = transactions[2]
-    assert time_since_last_transaction(transaction, transactions) == 1
+def test_merchant_interval_std_feature():
+    interval_stats = {"mean": 30, "std": 5}
+    assert merchant_interval_std_feature(interval_stats) == 5
 
 
-def test_time_since_last_transaction_same_amount(transactions) -> None:
-    transaction = transactions[2]
-    assert time_since_last_transaction_same_amount(transaction, transactions) == 0
+def test_merchant_interval_mean_feature():
+    interval_stats = {"mean": 30, "std": 5}
+    assert merchant_interval_mean_feature(interval_stats) == 30
 
 
-def test_average_transaction_amount(transactions) -> None:
-    assert average_transaction_amount("user1", transactions) == 133.33
+def test_time_since_last_transaction_same_merchant_feature():
+    parsed_dates = [datetime(2025, 3, 1), datetime(2025, 3, 15)]
+    assert time_since_last_transaction_same_merchant_feature(parsed_dates) == 14.0
 
 
-def test_transaction_frequency(transactions) -> None:
-    assert transaction_frequency("user1", transactions, 30) == 5
+def test_is_deposit_feature():
+    transaction = Transaction(user_id="1", amount=100.0)
+    merchant_trans = [Transaction(user_id="1", amount=100.0)] * 4
+    assert is_deposit_feature(transaction, merchant_trans) == 1
 
 
-def test_standard_deviation_of_transaction_amount(transactions) -> None:
-    assert round(standard_deviation_of_transaction_amount("user1", transactions), 2) == 50.0
+def test_low_amount_variation_feature():
+    amount_stats = {"mean": 100.0, "std": 5.0}
+    assert low_amount_variation_feature(amount_stats) == 1
 
 
-def test_most_common_transaction_day(transactions) -> None:
-    assert most_common_transaction_day("user1", transactions) == 1
-
-
-def test_is_fixed_interval(transactions) -> None:
-    transaction = transactions[2]
-    assert is_fixed_interval(transaction, transactions) == 1
-
-
-def test_subscription_price_consistency(transactions) -> None:
-    assert subscription_price_consistency("user1", transactions) == 0.0
-
-
-def test_is_price_increasing(transactions) -> None:
-    assert is_price_increasing("user1", transactions) == 1
-
-
-def test_transaction_time_fourier(transactions) -> None:
-    assert transaction_time_fourier("user1", transactions) >= 0
-
-
-def test_identical_transaction_ratio(transactions) -> None:
-    transaction = transactions[0]
-    assert identical_transaction_ratio(transaction, transactions) == 0.25
-
-
-def test_is_start_or_end_of_month(transactions) -> None:
-    transaction = transactions[0]
-    assert is_start_or_end_of_month(transaction) == 1
-
-
-def test_is_monthly_recurring(transactions) -> None:
-    transaction = transactions[0]
-    assert is_monthly_recurring(transaction, transactions) == 1
-
-
-def test_is_large_transaction(transactions) -> None:
-    """Test that is_large_transaction returns 1 for large transactions."""
-    transaction = Transaction(id=9, user_id="user1", name="vendor1", amount=400, date="2024-01-10")
-    assert is_large_transaction(transaction, transactions) == 1
-
-    transaction = Transaction(id=10, user_id="user1", name="vendor1", amount=200, date="2024-01-11")
-    assert is_large_transaction(transaction, transactions) == 0
-
-
-def test_transaction_amount_ratio(transactions) -> None:
-    """Test that transaction_amount_ratio returns the correct ratio."""
-    transaction = transactions[0]
-    assert transaction_amount_ratio(transaction, transactions) == 0.75
-
-    transaction = transactions[2]
-    assert transaction_amount_ratio(transaction, transactions) == 1.5
-
-
-def test_median_transaction_interval(transactions) -> None:
-    """Test that median_transaction_interval returns the correct median interval."""
-    assert median_transaction_interval("user1", transactions) == 7.0
-
-
-def test_normalized_transaction_frequency(transactions) -> None:
-    """Test that normalized_transaction_frequency returns the correct frequency."""
-    assert normalized_transaction_frequency("user1", transactions) == 0.25
+def test_get_features():
+    transaction = Transaction(user_id="1", amount=100.0, date="2025-03-17")
+    all_transactions = [Transaction(user_id="1", amount=100.0)]
+    features = get_features(transaction, all_transactions)
+    assert isinstance(features, dict)

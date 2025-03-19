@@ -11,6 +11,7 @@ module from recur_scan.features to prepare the input data.
 import argparse
 import json
 import os
+import time
 
 import joblib
 from loguru import logger
@@ -24,11 +25,12 @@ from recur_scan.transactions import group_transactions, read_labeled_transaction
 
 # %%
 # configure the script
-
+start = time.time()
 n_cv_folds = 3  # number of cross-validation folds, could be 5
-n_hpo_iters = 20  # number of hyperparameter optimization iterations
+do_hyperparameter_optimization = True  # set to False to use the default hyperparameters
+n_hpo_iters = 5  # number of hyperparameter optimization iterations
 
-in_path = "C:/Users/User/Downloads/laurels_22.csv"
+in_path = "C:/Users/User/Downloads/recur_scan_train.csv"
 out_dir = "C:/Users/User/Downloads/output"
 
 # %%
@@ -75,6 +77,7 @@ features = [
 # convert features to a matrix for machine learning
 X = DictVectorizer(sparse=False).fit_transform(features)
 logger.info(f"Converted {len(features)} features into a {X.shape} matrix")
+print(f"Feature Extraction Time: {(time.time() - start) / 60:.2f} minutes")
 
 # %%
 #
@@ -82,27 +85,63 @@ logger.info(f"Converted {len(features)} features into a {X.shape} matrix")
 #
 
 # Define parameter grid
-param_dist = {
-    "n_estimators": [100, 200, 500, 1000],
-    "max_depth": [10, 20, 30, None],
-    "min_samples_split": [2, 5, 10],
-    "min_samples_leaf": [1, 2, 4],
-    "max_features": ["sqrt", "log2", None],
-    "bootstrap": [True, False],
-}
+if do_hyperparameter_optimization:
+    # Define parameter grid
+    param_dist = {
+        "n_estimators": [200, 300],
+        "max_depth": [20, 30],
+        "min_samples_split": [2, 5],
+        "min_samples_leaf": [2, 4],
+        "max_features": ["sqrt"],
+        "bootstrap": [True],
+        "class_weight": [{0: 1, 1: 20}],
+    }
+
+    # Random search
+    model = RandomForestClassifier(random_state=42)
+    random_search = RandomizedSearchCV(
+        model, param_dist, n_iter=n_hpo_iters, cv=n_cv_folds, scoring="f1", n_jobs=-1, verbose=3
+    )
+    random_search.fit(X, y)
+
+    print("Best Hyperparameters:")
+    for param, value in random_search.best_params_.items():
+        print(f"  {param}: {value}")
+
+    best_params = random_search.best_params_
+else:
+    # default hyperparameters
+    best_params = {
+        "n_estimators": 100,
+        "min_samples_split": 10,
+        "min_samples_leaf": 1,
+        "max_features": "sqrt",
+        "max_depth": None,
+        "bootstrap": False,
+        "class_weight": {0: 1, 1: 20},
+    }
+
+# param_dist = {
+#     "n_estimators": [100, 200],           # Fewer trees
+#     "max_depth": [10, 15],                # Reasonable depths
+#     "min_samples_split": [2, 5],
+#     "min_samples_leaf": [1, 2],
+#     "max_features": ["sqrt"],             # Faster than None
+#     "bootstrap": [True],                  # Default is sufficient
+# }
 
 # Random search
-model = RandomForestClassifier(random_state=42)
-random_search = RandomizedSearchCV(
-    model, param_dist, n_iter=n_hpo_iters, cv=n_cv_folds, scoring="f1", n_jobs=-1, verbose=1
-)
-random_search.fit(X, y)
+# model = RandomForestClassifier(random_state=42, class_weight={0: 1, 1: 10})
+# random_search = RandomizedSearchCV(
+#     model, param_dist, n_iter=n_hpo_iters, cv=n_cv_folds, scoring="f1", n_jobs=-1, verbose=1
+# )
+# random_search.fit(X, y)
 
-print("Best Hyperparameters:")
-for param, value in random_search.best_params_.items():
-    print(f"  {param}: {value}")
+# print("Best Hyperparameters:")
+# for param, value in random_search.best_params_.items():
+#     print(f"  {param}: {value}")
 
-best_params = random_search.best_params_
+# best_params = random_search.best_params_
 
 # consider setting the best params yourself someday instead of using the random search
 # best_params = {
@@ -123,6 +162,7 @@ best_params = random_search.best_params_
 
 model = RandomForestClassifier(random_state=42, **best_params)
 model.fit(X, y)
+print(f"Training Time: {(time.time() - start) / 60:.2f} minutes")
 
 # %%
 # save the model using joblib
@@ -223,5 +263,5 @@ print(f"F1 Score: {sum(f1s) / len(f1s):.2f}")
 logger.info(f"Found {len(misclassified)} misclassified transactions (variance errors)")
 
 write_transactions(os.path.join(out_dir, "variance_errors.csv"), misclassified, y)
-
+print(f"Total Runtime: {(time.time() - start) / 60:.2f} minutes")
 # %%
