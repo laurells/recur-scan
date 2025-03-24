@@ -1,8 +1,8 @@
 from collections import defaultdict
 from datetime import datetime
-from typing import List, Dict, Union, Optional
 
 import numpy as np
+from scipy.stats import entropy
 
 from recur_scan.transactions import Transaction
 
@@ -150,22 +150,15 @@ def identical_transaction_ratio_feature(
     return identical_transaction_count / len(all_transactions) if len(all_transactions) > 0 else 0.0
 
 
-def is_monthly_recurring_feature(merchant_trans: list[Transaction]) -> int:
-    """Determine if transactions occur on roughly the same day each month (≤3 unique days).
-
-    Args:
-        merchant_trans (List[Transaction]): List of transactions for this user and merchant.
-
-    Returns:
-        int: 1 if transactions occur on ≤3 unique days of the month, 0 otherwise.
-    """
-    unique_days = set()
-    for trans in merchant_trans:
-        date = _parse_date(trans.date)
-        if date is not None:
-            day_of_month = date.day
-            unique_days.add(day_of_month)
-    return 1 if len(unique_days) <= 5 else 0
+def is_monthly_recurring_feature(merchant_trans: list[Transaction]) -> float:
+    """Determine if transactions occur on roughly the same day each month (≤3 unique days)."""
+    if len(merchant_trans) <= 1:
+        return 0.0
+    days = [date.day for date in [_parse_date(t.date) for t in merchant_trans] if date]
+    if not days:
+        return 0.0
+    unique_days = len(set(days))
+    return 1.0 - min((unique_days - 1) / 5.0, 1.0)
 
 
 def is_varying_amount_recurring_feature(interval_stats: dict[str, float], amount_stats: dict[str, float]) -> int:
@@ -178,11 +171,9 @@ def is_varying_amount_recurring_feature(interval_stats: dict[str, float], amount
     Returns:
         int: 1 if intervals are consistent (<45 days std) and amounts vary (>0.002 std/mean), 0 otherwise.
     """
-    is_varying_amount_recurring = 0
-    # Check if intervals are reasonably consistent and variation in amounts
     if interval_stats["std"] < 45 and amount_stats["mean"] > 0 and (amount_stats["std"] / amount_stats["mean"]) > 0.002:
-        is_varying_amount_recurring = 1
-    return is_varying_amount_recurring
+        return 1
+    return 0
 
 
 def day_consistency_score_feature(merchant_trans: list[Transaction]) -> float:
@@ -194,39 +185,29 @@ def day_consistency_score_feature(merchant_trans: list[Transaction]) -> float:
     Returns:
         float: Score from 0 to 1; higher means more consistent days (lower std).
     """
-    day_values = []
-    for trans in merchant_trans:
-        date = _parse_date(trans.date)
-        if date is not None:
-            day_values.append(date.day)
-    day_consistency_score = 0.0
-    if len(day_values) > 0:
-        day_std = float(np.std(day_values))  # Standard deviation of days
-        consistency_ratio = day_std / 5.0  # Normalize by 5 days
-        if consistency_ratio > 1.0:
-            consistency_ratio = 1.0
-        day_consistency_score = 1.0 - consistency_ratio  # Invert: lower std → higher score
-    return day_consistency_score
+    days = [date.day for date in [_parse_date(t.date) for t in merchant_trans] if date]
+    if not days:
+        return 0.0
+    if len(days) == 1:
+        return 0.5
+    std = float(np.std(days))
+    return 1.0 - min(std / 3.0, 1.0)
 
 
-def is_near_periodic_interval_feature(interval_stats: dict[str, float]) -> int:
-    """Check if transaction intervals are near weekly, monthly, or yearly periodicity.
-
-    Args:
-        interval_stats (Dict[str, float]): Mean and std of intervals between transactions.
-
-    Returns:
-        int: 1 if mean interval is close to 7, 30, or 365 days with low std (<7), 0 otherwise.
-    """
-    is_near_periodic_interval = 0
-    mean_interval = interval_stats["mean"]
-    periodic_targets = [(7, 3), (30, 5), (365, 15)]  # (target days, tolerance)
-    for target, tolerance in periodic_targets:
-        difference = abs(mean_interval - target)
-        if difference <= tolerance and interval_stats["std"] < 7:  # Check proximity and consistency
-            is_near_periodic_interval = 1
-            break
-    return is_near_periodic_interval
+def is_near_periodic_interval_feature(interval_stats: dict[str, float]) -> float:
+    """Score proximity to periodic intervals (0-1)."""
+    if interval_stats["mean"] == 0:
+        return 0.0
+    mean = interval_stats["mean"]
+    std = interval_stats["std"]
+    targets = [(7, 2), (30, 3), (365, 10)]
+    best_score = 0.0
+    for target, tolerance in targets:
+        deviation = abs(mean - target) / target
+        if std < 5:  # Stricter consistency
+            score = 1.0 - min(deviation / (tolerance / target), 1.0)
+            best_score = max(best_score, score)
+    return best_score
 
 
 def merchant_amount_std_feature(amount_stats: dict[str, float]) -> float:
@@ -250,7 +231,7 @@ def merchant_interval_std_feature(interval_stats: dict[str, float]) -> float:
     Returns:
         float: Standard deviation of intervals; 0.0 if no intervals.
     """
-    return interval_stats["std"]
+    return interval_stats["std"] if interval_stats["std"] > 0 else 30.0
 
 
 def merchant_interval_mean_feature(interval_stats: dict[str, float]) -> float:
@@ -262,12 +243,18 @@ def merchant_interval_mean_feature(interval_stats: dict[str, float]) -> float:
     Returns:
         float: Mean interval in days; 0.0 if no intervals.
     """
-    return interval_stats["mean"]
+    return interval_stats["mean"] if interval_stats["mean"] > 0 else 60.0
 
 
 def time_since_last_transaction_same_merchant_feature(parsed_dates: list[datetime]) -> float:
+    """Days since earliest transaction or average interval."""
+    if not parsed_dates:
+        return 0
+    now = datetime.now()
+    if len(parsed_dates) == 1:
+        return (now - parsed_dates[0]).days / 365  # Normalize by year
     intervals = _calculate_intervals(parsed_dates)
-    return sum(intervals) / len(intervals) if intervals else 0.0
+    return (sum(intervals) / len(intervals)) / 365 if intervals else (now - min(parsed_dates)).days / 365
 
 
 def is_deposit_feature(transaction: Transaction, merchant_trans: list[Transaction]) -> int:
@@ -286,16 +273,16 @@ def is_deposit_feature(transaction: Transaction, merchant_trans: list[Transactio
     return is_deposit
 
 
-def day_of_week_feature(transaction: Transaction) -> int:
+def day_of_week_feature(transaction: Transaction) -> float:
     """Day of the week (0-6, Monday-Sunday)."""
     date = _parse_date(transaction.date)
-    return date.weekday() if date else 0
+    return date.weekday() / 6 if date else 0
 
 
-def transaction_month_feature(transaction: Transaction) -> int:
+def transaction_month_feature(transaction: Transaction) -> float:
     """Month of the transaction (1-12)."""
     date = _parse_date(transaction.date)
-    return date.month if date else 0
+    return (date.month - 1) / 11 if date else 0
 
 
 def rolling_amount_mean_feature(merchant_trans: list[Transaction]) -> float:
@@ -319,6 +306,162 @@ def recurrence_likelihood_feature(
     amount_score = 1 / (amount_stats["std"] / (mean_amount + 0.01) + 1)
     frequency_score = min(len(merchant_trans) / 5.0, 1.0)
     return interval_score * amount_score * frequency_score
+
+
+def is_single_transaction_feature(merchant_trans: list[Transaction]) -> int:
+    """Check if there is only one transaction for this user-merchant pair.
+
+    Args:
+        merchant_trans (List[Transaction]): List of transactions for the user and merchant.
+
+    Returns:
+        int: 1 if there is only one transaction, 0 otherwise.
+    """
+    return 1 if len(merchant_trans) == 1 else 0
+
+
+def interval_variability_feature(interval_stats: dict[str, float]) -> float:
+    """Calculate the coefficient of variation for transaction intervals.
+
+    Args:
+        interval_stats (Dict[str, float]): Dictionary with 'mean' and 'std' of intervals.
+
+    Returns:
+        float: Coefficient of variation (std / mean), or 0 if mean is 0.
+    """
+    mean = interval_stats["mean"]
+    if mean == 0:
+        return 1.0  # High variability for singletons
+    return min(interval_stats["std"] / mean, 2.0)  # Cap at 2 for extreme cases
+
+
+def merchant_amount_frequency_feature(merchant_trans: list[Transaction]) -> int:
+    """Count the number of unique transaction amounts for the user-merchant pair.
+
+    Args:
+        merchant_trans (List[Transaction]): List of transactions for the user and merchant.
+
+    Returns:
+        int: Number of unique transaction amounts.
+    """
+    unique_amounts = {trans.amount for trans in merchant_trans}
+    return len(unique_amounts)
+
+
+def non_recurring_irregularity_score(
+    merchant_trans: list[Transaction], interval_stats: dict[str, float], amount_stats: dict[str, float]
+) -> float:
+    """Calculate a score indicating likelihood of a transaction being non-recurring based on irregularity.
+
+    Args:
+        merchant_trans (List[Transaction]): List of transactions for the user and merchant.
+        interval_stats (Dict[str, float]): Mean and std of intervals between transactions.
+        amount_stats (Dict[str, float]): Mean and std of transaction amounts.
+
+    Returns:
+        float: Score between 0 and 1; higher values indicate more irregularity (non-recurring).
+    """
+    # Component 1: Interval variability (std/mean, capped at 1.0)
+    mean_interval = interval_stats["mean"]
+    interval_var = interval_stats["std"] / mean_interval if mean_interval > 0 else 0.0
+    interval_score = min(interval_var, 1.0)
+
+    # Component 2: Amount variability (std/mean from amount_stats, higher → more non-recurring)
+    amount_var = amount_stats["std"] / amount_stats["mean"] if amount_stats["mean"] > 0 else 0.0
+    amount_score = min(amount_var, 1.0)  # Cap at 1.0, high variability = non-recurring
+
+    # Component 3: Inverse frequency (lower frequency → more non-recurring)
+    frequency_score = 1.0 - min(len(merchant_trans) / 5.0, 1.0)
+
+    # Weighted average
+    weights = [0.4, 0.3, 0.3]  # Interval, amount, frequency
+    total_score = weights[0] * interval_score + weights[1] * amount_score + weights[2] * frequency_score
+    return min(total_score, 1.0)  # Ensure score stays in 0-1 range
+
+
+def transaction_pattern_complexity(merchant_trans: list[Transaction], interval_stats: dict[str, float]) -> float:
+    """Calculate a complexity score for the transaction pattern, higher for non-recurring.
+
+    Args:
+        merchant_trans (List[Transaction]): List of transactions for the user and merchant.
+        interval_stats (Dict[str, float]): Mean and std of intervals between transactions.
+
+    Returns:
+        float: Score between 0 and 1; higher indicates more complex/non-recurring patterns.
+    """
+    parsed_dates = [date for date in [_parse_date(t.date) for t in merchant_trans] if date is not None]
+    intervals = _calculate_intervals(parsed_dates)
+    if not intervals:
+        return 0.0
+
+    # Component 1: Interval entropy (distribution complexity)
+    bins = [min(max(1, int(i / 7)), 52) for i in intervals]
+    value_counts = np.bincount(bins, minlength=53)[1:]
+    interval_entropy = float(entropy(value_counts / value_counts.sum()) / np.log(52) if value_counts.sum() > 0 else 0.0)
+
+    # Component 2: Interval variability (std/mean from interval_stats)
+    mean_interval = interval_stats["mean"]
+    interval_var = float(interval_stats["std"] / mean_interval if mean_interval > 0 else 0.0)
+    interval_var_score = min(interval_var, 1.0)  # Cap at 1.0 for normalization
+
+    # Component 3: Amount diversity
+    amounts = [t.amount for t in merchant_trans]
+    amount_entropy = float(min(len(set(amounts)) / 10.0, 1.0) if amounts else 0.0)
+
+    # Component 4: Inverse frequency
+    frequency_score = float(1.0 - min(len(merchant_trans) / 5.0, 1.0))
+
+    # Weighted average
+    weights = [0.4, 0.3, 0.2, 0.1]  # Entropy, variability, amount, frequency
+    total_score = (
+        weights[0] * interval_entropy
+        + weights[1] * interval_var_score
+        + weights[2] * amount_entropy
+        + weights[3] * frequency_score
+    )
+    return float(min(total_score, 1.0))  # Ensure score stays in 0-1 range
+
+
+def date_irregularity_dominance(
+    merchant_trans: list[Transaction], interval_stats: dict[str, float], amount_stats: dict[str, float]
+) -> float:
+    """Score emphasizing date irregularity for non-recurring transactions.
+
+    Args:
+        merchant_trans (List[Transaction]): Transactions for the user and merchant.
+        interval_stats (Dict[str, float]): Mean and std of intervals.
+        amount_stats (Dict[str, float]): Mean and std of amounts.
+
+    Returns:
+        float: Score 0-1; higher indicates stronger non-recurring due to irregular dates.
+    """
+    # Explicitly filter None values for mypy
+    parsed_dates = [date for date in [_parse_date(t.date) for t in merchant_trans] if date is not None]
+    intervals = _calculate_intervals(parsed_dates)
+    n_trans = len(merchant_trans)
+    if n_trans <= 1:
+        return 0.5
+
+    bins = [min(max(1, int(i / 7)), 52) for i in intervals]
+    value_counts = np.bincount(bins, minlength=53)[1:]
+    entropy_score = float(entropy(value_counts / value_counts.sum()) / np.log(52) if value_counts.sum() > 0 else 0.0)
+    mean = interval_stats["mean"]
+    deviation = min(abs(mean - target) / target for target in [7, 30, 365])
+    deviation_score = float(min(deviation * 3, 1.0))
+    frequency_score = float(1.0 - min(n_trans / 5.0, 1.0))
+    amount_consistency = float(
+        1.0 - min(amount_stats["std"] / amount_stats["mean"] if amount_stats["mean"] > 0 else 0.0, 1.0)
+    )
+    weights = [0.5, 0.3, 0.1, 0.1]
+    return float(
+        min(
+            weights[0] * entropy_score
+            + weights[1] * deviation_score
+            + weights[2] * frequency_score
+            + weights[3] * amount_consistency,
+            1.0,
+        )
+    )
 
 
 # Main Feature Extraction Function
@@ -392,6 +535,14 @@ def get_features(
         "transaction_month": transaction_month_feature(transaction),
         "rolling_amount_mean": rolling_amount_mean_feature(merchant_trans),
         "low_amount_variation": low_amount_variation_feature(amount_stats),
+        "is_single_transaction": is_single_transaction_feature(merchant_trans),
+        "interval_variability": interval_variability_feature(interval_stats),
+        "merchant_amount_frequency": merchant_amount_frequency_feature(merchant_trans),
+        "non_recurring_irregularity_score": non_recurring_irregularity_score(
+            merchant_trans, interval_stats, amount_stats
+        ),
+        "transaction_pattern_complexity": transaction_pattern_complexity(merchant_trans, interval_stats),
+        "date_irregularity_dominance": date_irregularity_dominance(merchant_trans, interval_stats, amount_stats),
     }
 
     return features_dict
