@@ -38,24 +38,24 @@ from recur_scan.transactions import Transaction
 # Fixtures
 @pytest.fixture
 def single_transaction():
-    return Transaction(user_id="1", name="MerchantA", amount=100.0, date="2025-03-17")
+    return Transaction(id="t1", user_id="1", name="MerchantA", amount=100.0, date="2025-03-17")
 
 
 @pytest.fixture
 def recurring_transactions():
     return [
-        Transaction(user_id="1", name="Netflix", amount=16.77, date="2025-01-01"),
-        Transaction(user_id="1", name="Netflix", amount=16.77, date="2025-02-01"),
-        Transaction(user_id="1", name="Netflix", amount=16.77, date="2025-03-01"),
+        Transaction(id="t1", user_id="1", name="Netflix", amount=16.77, date="2025-01-01"),
+        Transaction(id="t2", user_id="1", name="Netflix", amount=16.77, date="2025-02-01"),
+        Transaction(id="t3", user_id="1", name="Netflix", amount=16.77, date="2025-03-01"),
     ]
 
 
 @pytest.fixture
 def irregular_transactions():
     return [
-        Transaction(user_id="1", name="Dave", amount=55.0, date="2025-01-01"),
-        Transaction(user_id="1", name="Dave", amount=55.0, date="2025-01-15"),
-        Transaction(user_id="1", name="Dave", amount=55.0, date="2025-02-12"),
+        Transaction(id="t1", user_id="1", name="Dave", amount=55.0, date="2025-01-01"),
+        Transaction(id="t2", user_id="1", name="Dave", amount=55.0, date="2025-01-15"),
+        Transaction(id="t3", user_id="1", name="Dave", amount=55.0, date="2025-02-12"),
     ]
 
 
@@ -83,19 +83,30 @@ def test_calculate_statistics(recurring_transactions):
 def test_n_transactions_same_amount_feature(single_transaction):
     amount_counts = defaultdict(int, {100.0: 2, 200.0: 1})
     assert n_transactions_same_amount_feature(single_transaction, amount_counts) == 2
-    assert n_transactions_same_amount_feature(Transaction(user_id="1", amount=300.0), amount_counts) == 0
+    assert n_transactions_same_amount_feature(
+        Transaction(id="t2", user_id="1", amount=300.0, name="X", date="2025-03-18"), amount_counts
+    ) == 0
 
 
 def test_percent_transactions_same_amount_feature(single_transaction):
-    all_txs = [single_transaction, Transaction(user_id="2", name="B", amount=200.0, date="2025-03-18")]
+    all_txs = [
+        single_transaction,
+        Transaction(id="t2", user_id="2", name="B", amount=200.0, date="2025-03-18"),
+    ]
     amount_counts = defaultdict(int, {100.0: 1, 200.0: 1})
     assert percent_transactions_same_amount_feature(single_transaction, all_txs, amount_counts) == 0.5
     assert percent_transactions_same_amount_feature(single_transaction, [], amount_counts) == 0.0
 
 
 def test_identical_transaction_ratio_feature(single_transaction):
-    all_txs = [single_transaction, Transaction(user_id="1", name="MerchantA", amount=100.0, date="2025-03-18")]
-    merchant_txs = [single_transaction, Transaction(user_id="1", name="MerchantA", amount=200.0, date="2025-03-19")]
+    all_txs = [
+        single_transaction,
+        Transaction(id="t2", user_id="1", name="MerchantA", amount=100.0, date="2025-03-18"),
+    ]
+    merchant_txs = [
+        single_transaction,
+        Transaction(id="t3", user_id="1", name="MerchantA", amount=200.0, date="2025-03-19"),
+    ]
     assert identical_transaction_ratio_feature(single_transaction, all_txs, merchant_txs) == 0.5
 
 
@@ -170,14 +181,16 @@ def test_is_deposit_feature(single_transaction, recurring_transactions):
 
 def test_day_of_week_feature(single_transaction):
     assert day_of_week_feature(single_transaction) == pytest.approx(0.0 / 6)  # Monday = 0
-    assert day_of_week_feature(Transaction(user_id="1", name="A", date="2025-03-23")) == pytest.approx(
-        6.0 / 6
-    )  # Sunday = 6
+    assert day_of_week_feature(
+        Transaction(id="t2", user_id="1", name="A", date="2025-03-23", amount=0.0)
+    ) == pytest.approx(6.0 / 6)  # Sunday = 6
 
 
 def test_transaction_month_feature(single_transaction):
     assert transaction_month_feature(single_transaction) == pytest.approx((3 - 1) / 11)  # March
-    assert transaction_month_feature(Transaction(user_id="1", name="A", date="2025-01-01")) == 0.0  # January
+    assert transaction_month_feature(
+        Transaction(id="t2", user_id="1", name="A", date="2025-01-01", amount=0.0)
+    ) == 0.0  # January
 
 
 def test_rolling_amount_mean_feature(recurring_transactions, irregular_transactions):
