@@ -1,5 +1,7 @@
+import re
 from collections import defaultdict
 from datetime import datetime
+from functools import lru_cache
 
 import numpy as np
 from scipy.stats import entropy
@@ -8,6 +10,7 @@ from recur_scan.transactions import Transaction
 
 
 # Helper Functions
+@lru_cache(maxsize=1024)
 def _parse_date(date_string: str) -> datetime | None:
     """Parse a date string into a datetime object with error handling.
 
@@ -99,35 +102,35 @@ def _calculate_statistics(values: list[float]) -> dict[str, float]:
 
 
 # Individual Feature Functions
-def n_transactions_same_amount_feature(transaction: Transaction, amount_counts: dict[float, int]) -> int:
-    """Count how many transactions across all users have the same amount as the given transaction.
+# def n_transactions_same_amount(transaction: Transaction, amount_counts: dict[float, int]) -> int:
+#     """Count how many transactions across all users have the same amount as the given transaction.
 
-    Args:
-        transaction (Transaction): The transaction to evaluate.
-        all_transactions (List[Transaction]): List of all transactions (unused here but kept for consistency).
-        amount_counts (Dict[float, int]): Precomputed counts of transactions per amount.
+#     Args:
+#         transaction (Transaction): The transaction to evaluate.
+#         all_transactions (List[Transaction]): List of all transactions (unused here but kept for consistency).
+#         amount_counts (Dict[float, int]): Precomputed counts of transactions per amount.
 
-    Returns:
-        int: Number of transactions with the same amount; 0 if not found in amount_counts.
-    """
-    return amount_counts.get(transaction.amount, 0)
+#     Returns:
+#         int: Number of transactions with the same amount; 0 if not found in amount_counts.
+#     """
+#     return amount_counts.get(transaction.amount, 0)
 
 
-def percent_transactions_same_amount_feature(
-    transaction: Transaction, all_transactions: list[Transaction], amount_counts: dict[float, int]
-) -> float:
-    """Calculate the percentage of all transactions that match the given transaction's amount.
+# def percent_transactions_same_amount(
+#     transaction: Transaction, all_transactions: list[Transaction], amount_counts: dict[float, int]
+# ) -> float:
+#     """Calculate the percentage of all transactions that match the given transaction's amount.
 
-    Args:
-        transaction (Transaction): The transaction to evaluate.
-        all_transactions (List[Transaction]): List of all transactions to compute total count.
-        amount_counts (Dict[float, int]): Precomputed counts of transactions per amount.
+#     Args:
+#         transaction (Transaction): The transaction to evaluate.
+#         all_transactions (List[Transaction]): List of all transactions to compute total count.
+#         amount_counts (Dict[float, int]): Precomputed counts of transactions per amount.
 
-    Returns:
-        float: Ratio of transactions with the same amount to total transactions; 0.0 if no transactions.
-    """
-    n_transactions_same_amount = amount_counts.get(transaction.amount, 0)
-    return n_transactions_same_amount / len(all_transactions) if all_transactions else 0.0
+#     Returns:
+#         float: Ratio of transactions with the same amount to total transactions; 0.0 if no transactions.
+#     """
+#     n_transactions_same_amount = amount_counts.get(transaction.amount, 0)
+#     return n_transactions_same_amount / len(all_transactions) if all_transactions else 0.0
 
 
 def identical_transaction_ratio_feature(
@@ -464,6 +467,123 @@ def date_irregularity_dominance(
     )
 
 
+def get_is_always_recurring(transaction: Transaction) -> bool:
+    """Check if the transaction is always recurring because of the vendor name - check lowercase match"""
+    always_recurring_vendors = {
+        "google storage",
+        "netflix",
+        "hulu",
+        "spotify",
+    }
+    return transaction.name.lower() in always_recurring_vendors
+
+
+def get_is_insurance(transaction: Transaction) -> bool:
+    """Check if the transaction is an insurance payment."""
+    # use a regular expression with boundaries to match case-insensitive insurance
+    # and insurance-related terms
+    match = re.search(r"\b(insurance|insur|insuranc)\b", transaction.name, re.IGNORECASE)
+    return bool(match)
+
+
+def get_is_utility(transaction: Transaction) -> bool:
+    """Check if the transaction is a utility payment."""
+    # use a regular expression with boundaries to match case-insensitive utility
+    # and utility-related terms
+    match = re.search(r"\b(utility|utilit|energy)\b", transaction.name, re.IGNORECASE)
+    return bool(match)
+
+
+def get_is_phone(transaction: Transaction) -> bool:
+    """Check if the transaction is a phone payment."""
+    # use a regular expression with boundaries to match case-insensitive phone
+    # and phone-related terms
+    match = re.search(r"\b(at&t|t-mobile|verizon)\b", transaction.name, re.IGNORECASE)
+    return bool(match)
+
+
+def get_n_transactions_days_apart(
+    transaction: Transaction,
+    all_transactions: list[Transaction],
+    n_days_apart: int,
+    n_days_off: int,
+) -> int:
+    """
+    Get the number of transactions in all_transactions that are within n_days_off of
+    being n_days_apart from transaction.
+
+    Args:
+        transaction (Transaction): The reference transaction.
+        all_transactions (List[Transaction]): List of transactions to compare against.
+        n_days_apart (int): Target interval in days (e.g., 7 for weekly).
+        n_days_off (int): Allowed deviation from the target interval.
+
+    Returns:
+        int: Number of transactions matching the criteria.
+    """
+    n_txs = 0
+    transaction_date = _parse_date(transaction.date)
+    if transaction_date is None:  # Early exit if reference date is invalid
+        return 0
+
+    # Pre-calculate bounds for faster checking
+    lower_remainder = n_days_apart - n_days_off
+    upper_remainder = n_days_off
+
+    for t in all_transactions:
+        t_date = _parse_date(t.date)
+        if t_date is None:  # Skip if comparison date is invalid
+            continue
+        days_diff = abs((t_date - transaction_date).days)
+
+        # Skip if the difference is less than minimum required
+        if days_diff < n_days_apart - n_days_off:
+            continue
+
+        # Check if the difference is close to any multiple of n_days_apart
+        remainder = days_diff % n_days_apart
+
+        if remainder <= upper_remainder or remainder >= lower_remainder:
+            n_txs += 1
+
+    return n_txs
+
+
+def _get_day(date: str) -> int:
+    """Get the day of the month from a transaction date."""
+    return int(date.split("-")[2])
+
+
+def get_n_transactions_same_day(transaction: Transaction, all_transactions: list[Transaction], n_days_off: int) -> int:
+    """Get the number of transactions in all_transactions that are on the same day of the month as transaction"""
+    return len([t for t in all_transactions if abs(_get_day(t.date) - _get_day(transaction.date)) <= n_days_off])
+
+
+def get_pct_transactions_same_day(
+    transaction: Transaction, all_transactions: list[Transaction], n_days_off: int
+) -> float:
+    """Get the percentage of transactions in all_transactions that are on the same day of the month as transaction"""
+    return get_n_transactions_same_day(transaction, all_transactions, n_days_off) / len(all_transactions)
+
+
+def get_ends_in_99(transaction: Transaction) -> bool:
+    """Check if the transaction amount ends in 99"""
+    return (transaction.amount * 100) % 100 == 99
+
+
+def get_n_transactions_same_amount(transaction: Transaction, all_transactions: list[Transaction]) -> int:
+    """Get the number of transactions in all_transactions with the same amount as transaction"""
+    return len([t for t in all_transactions if t.amount == transaction.amount])
+
+
+def get_percent_transactions_same_amount(transaction: Transaction, all_transactions: list[Transaction]) -> float:
+    """Get the percentage of transactions in all_transactions with the same amount as transaction"""
+    if not all_transactions:
+        return 0.0
+    n_same_amount = len([t for t in all_transactions if t.amount == transaction.amount])
+    return n_same_amount / len(all_transactions)
+
+
 # Main Feature Extraction Function
 def get_features(
     transaction: Transaction,
@@ -514,10 +634,12 @@ def get_features(
 
     # Construct feature dictionary by calling each feature function
     features_dict = {
-        "n_transactions_same_amount": n_transactions_same_amount_feature(transaction, amount_counts),
-        "percent_transactions_same_amount": percent_transactions_same_amount_feature(
-            transaction, all_transactions, amount_counts
-        ),
+        # "n_transactions_same_amount": n_transactions_same_amount_feature(transaction, amount_counts),
+        # "percent_transactions_same_amount": percent_transactions_same_amount_feature(
+        #     transaction, all_transactions, amount_counts
+        # ),
+        "n_transactions_same_amount": get_n_transactions_same_amount(transaction, all_transactions),
+        "percent_transactions_same_amount": get_percent_transactions_same_amount(transaction, all_transactions),
         "identical_transaction_ratio": identical_transaction_ratio_feature(
             transaction, all_transactions, merchant_trans
         ),
@@ -543,6 +665,20 @@ def get_features(
         ),
         "transaction_pattern_complexity": transaction_pattern_complexity(merchant_trans, interval_stats),
         "date_irregularity_dominance": date_irregularity_dominance(merchant_trans, interval_stats, amount_stats),
+        "ends_in_99": get_ends_in_99(transaction),
+        "amount": transaction.amount,
+        "same_day_exact": get_n_transactions_same_day(transaction, all_transactions, 0),
+        "pct_transactions_same_day": get_pct_transactions_same_day(transaction, all_transactions, 0),
+        "same_day_off_by_1": get_n_transactions_same_day(transaction, all_transactions, 1),
+        "same_day_off_by_2": get_n_transactions_same_day(transaction, all_transactions, 2),
+        "14_days_apart_exact": get_n_transactions_days_apart(transaction, all_transactions, 14, 0),
+        "14_days_apart_off_by_1": get_n_transactions_days_apart(transaction, all_transactions, 14, 1),
+        "7_days_apart_exact": get_n_transactions_days_apart(transaction, all_transactions, 7, 0),
+        "7_days_apart_off_by_1": get_n_transactions_days_apart(transaction, all_transactions, 7, 1),
+        "is_insurance": get_is_insurance(transaction),
+        "is_utility": get_is_utility(transaction),
+        "is_phone": get_is_phone(transaction),
+        "is_always_recurring": get_is_always_recurring(transaction),
     }
 
     return features_dict

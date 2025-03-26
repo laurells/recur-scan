@@ -33,8 +33,8 @@ do_hyperparameter_optimization = False  # set to False to use the default hyperp
 n_hpo_iters = 20  # number of hyperparameter optimization iterations
 n_jobs = -1  # number of jobs to run in parallel (set to 1 if your laptop gets too hot)
 
-in_path = "C:/Users/User/Downloads/recur_scan_train.csv"
-out_dir = "C:/Users/User/Downloads/output"
+in_path = "training file goes here"
+out_dir = "output directory goes here"
 
 # %%
 # parse script arguments from command line
@@ -251,7 +251,7 @@ write_transactions(os.path.join(out_dir, "variance_errors.csv"), misclassified, 
 # create a tree explainer
 # explainer = shap.TreeExplainer(model)
 # Faster approximation using PermutationExplainer
-X_sample = X[:10000]
+X_sample = X[:10000]  # type: ignore
 explainer = shap.explainers.Permutation(model.predict, X_sample)
 
 logger.info("Calculating SHAP values")
