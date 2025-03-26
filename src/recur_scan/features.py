@@ -588,8 +588,6 @@ def get_percent_transactions_same_amount(transaction: Transaction, all_transacti
 def get_features(
     transaction: Transaction,
     all_transactions: list[Transaction],
-    groups: dict[str, dict[str, list[Transaction]]] | None = None,
-    amount_counts: dict[float, int] | None = None,
 ) -> dict[str, float | int]:
     """Extract all features for a transaction by calling individual feature functions.
     This prepares a dictionary of features for model training.
@@ -597,20 +595,15 @@ def get_features(
     Args:
         transaction (Transaction): The transaction to extract features for.
         all_transactions (List[Transaction]): List of all transactions for context.
-        groups (Dict[str, Dict[str, List[Transaction]]], optional): Precomputed user-merchant groups.
-        amount_counts (Dict[float, int], optional): Precomputed counts of transactions per amount.
 
     Returns:
         Dict[str, Union[float, int]]: Dictionary mapping feature names to their computed values.
     """
-    # Use precomputed groups if provided, otherwise compute them
-    if groups is None:
-        groups = _aggregate_transactions(all_transactions)
-    # Use precomputed amount counts if provided, otherwise compute them
-    if amount_counts is None:
-        amount_counts = defaultdict(int)
-        for t in all_transactions:
-            amount_counts[t.amount] += 1
+    # Compute groups and amount counts internally
+    groups = _aggregate_transactions(all_transactions)
+    amount_counts: defaultdict[float, int] = defaultdict(int)
+    for t in all_transactions:
+        amount_counts[t.amount] += 1
 
     # Extract user ID and merchant name from the transaction
     user_id, merchant_name = transaction.user_id, transaction.name
