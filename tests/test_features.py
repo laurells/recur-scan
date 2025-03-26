@@ -15,9 +15,9 @@ from recur_scan.features import (
     get_is_insurance,
     get_is_phone,
     get_is_utility,
+    get_n_transactions_days_apart,
     get_n_transactions_same_amount,
     get_n_transactions_same_day,
-    get_pct_transactions_days_apart,
     get_pct_transactions_same_day,
     get_percent_transactions_same_amount,
     identical_transaction_ratio_feature,
@@ -402,8 +402,8 @@ def test_get_n_transactions_days_apart():
         Transaction(id=6, user_id="user1", name="name1", amount=2.99, date="2024-01-29"),
         Transaction(id=7, user_id="user1", name="name1", amount=2.99, date="2024-01-31"),
     ]
-    assert get_pct_transactions_days_apart(transactions[0], transactions, 14, 0) == 2 / 7
-    assert get_pct_transactions_days_apart(transactions[0], transactions, 14, 1) == 4 / 7
+    assert get_n_transactions_days_apart(transactions[0], transactions, 14, 0) == 2
+    assert get_n_transactions_days_apart(transactions[0], transactions, 14, 1) == 4
 
 
 def test_get_is_insurance():
