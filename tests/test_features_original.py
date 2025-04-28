@@ -151,7 +151,7 @@ def test_get_is_always_recurring() -> None:
     )
 
 
-def test_get_transaction_z_score():
+def test_get_transaction_z_score() -> None:
     """Test get_transaction_z_score."""
     transactions = [
         Transaction(id=1, user_id="user1", name="name1", amount=100, date="2024-01-01"),
@@ -170,13 +170,13 @@ def test_get_transaction_z_score():
     assert -1.3 < z_score < -1.1  # Allow a small tolerance for floating-point precision
 
 
-def test_get_is_amazon_prime():
+def test_get_is_amazon_prime() -> None:
     """Test get_is_amazon_prime."""
     assert get_is_amazon_prime(Transaction(id=1, user_id="user1", name="amazon prime", amount=100, date="2024-01-01"))
     assert not get_is_amazon_prime(Transaction(id=2, user_id="user1", name="netflix", amount=100, date="2024-01-01"))
 
 
-def test_get_is_known_recurring_vendor():
+def test_get_is_known_recurring_vendor() -> None:
     """Test get_is_known_recurring_vendor."""
     trans1 = Transaction("Netflix", 15.99, "01/01/2023")
     trans2 = Transaction("Walmart", 50.00, "01/01/2023")
@@ -186,7 +186,7 @@ def test_get_is_known_recurring_vendor():
     assert get_is_known_recurring_vendor(trans3) is True
 
 
-def test_get_is_known_non_recurring_vendor():
+def test_get_is_known_non_recurring_vendor() -> None:
     """Test get_is_known_non_recurring_vendor."""
     trans1 = Transaction("Walmart", 50.00, "01/01/2023")
     trans2 = Transaction("Netflix", 15.99, "01/01/2023")
@@ -196,7 +196,7 @@ def test_get_is_known_non_recurring_vendor():
     assert get_is_known_non_recurring_vendor(trans3) is True
 
 
-def test_get_same_amount_count():
+def test_get_same_amount_count() -> None:
     """Test get_same_amount_count."""
     trans1 = [
         Transaction("Test", 10.00, "01/01/2023"),
@@ -215,7 +215,7 @@ def test_get_same_amount_count():
     assert get_same_amount_count([]) == 0
 
 
-def test_get_is_albert_99_recurring():
+def test_get_is_albert_99_recurring() -> None:
     """Test get_is_albert_99_recurring."""
     trans1 = Transaction("Albert Subscription", 1.99, "01/01/2023")
     trans2 = Transaction("Albert Subscription", 1.50, "01/01/2023")
@@ -227,7 +227,7 @@ def test_get_is_albert_99_recurring():
     assert get_is_albert_99_recurring(trans4) is True
 
 
-def test_get_amount_consistency_score():
+def test_get_amount_consistency_score() -> None:
     """Test get_amount_consistency_score."""
     trans1 = [
         Transaction("Test", 10.00, "01/01/2023"),
@@ -252,7 +252,7 @@ def test_get_amount_consistency_score():
     assert get_amount_consistency_score([]) == 0.0
 
 
-def test_get_interval_consistency_score():
+def test_get_interval_consistency_score() -> None:
     """Test get_interval_consistency_score."""
     trans1 = [
         Transaction("Netflix", 15.99, "01/01/2023"),
@@ -277,7 +277,7 @@ def test_get_interval_consistency_score():
     assert get_interval_consistency_score([]) == 0.0
 
 
-def test_get_combined_recurrence_score():
+def test_get_combined_recurrence_score() -> None:
     """Test get_combined_recurrence_score."""
     trans1 = [
         Transaction("Netflix", 15.99, "01/01/2023"),
@@ -300,7 +300,7 @@ def test_get_combined_recurrence_score():
     assert get_combined_recurrence_score(trans1[0], []) == 0.0
 
 
-def test_get_is_recurring_same_amount_specific_intervals():
+def test_get_is_recurring_same_amount_specific_intervals() -> None:
     """Test get_is_recurring_same_amount_specific_intervals."""
     trans1 = [
         Transaction("Netflix", 15.99, "01/01/2023"),
@@ -325,7 +325,7 @@ def test_get_is_recurring_same_amount_specific_intervals():
     assert get_is_recurring_same_amount_specific_intervals([]) is False
 
 
-def test_detect_monthly_with_missing_entries():
+def test_detect_monthly_with_missing_entries() -> None:
     """Test detect_monthly_with_missing_entries."""
     trans1 = [
         Transaction("Netflix", 15.99, "01/01/2023"),
