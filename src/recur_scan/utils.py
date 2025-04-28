@@ -32,7 +32,7 @@ def safe_feature(fn: F) -> F:
     """
 
     @wraps(fn)
-    def wrapper(*args: Any, **kwargs: Any) -> float:
+    def float_wrapper(*args: Any, **kwargs: Any) -> float:
         try:
             val = fn(*args, **kwargs)
         except Exception:
@@ -52,7 +52,7 @@ def safe_feature(fn: F) -> F:
 
         return float(val)
 
-    return cast(F, wrapper)
+    return cast(F, float_wrapper)
 
 
 def safe_feature_bool(fn: B) -> B:
@@ -63,7 +63,7 @@ def safe_feature_bool(fn: B) -> B:
     """
 
     @wraps(fn)
-    def wrapper(*args: Any, **kwargs: Any) -> bool:
+    def bool_wrapper(*args: Any, **kwargs: Any) -> bool:
         try:
             val = fn(*args, **kwargs)
         except Exception:
@@ -71,7 +71,7 @@ def safe_feature_bool(fn: B) -> B:
 
         return bool(val)
 
-    return cast(B, wrapper)
+    return cast(B, bool_wrapper)
 
 
 def safe_feature_int(fn: IntCallable) -> IntCallable:
@@ -83,7 +83,7 @@ def safe_feature_int(fn: IntCallable) -> IntCallable:
     """
 
     @wraps(fn)
-    def wrapper(*args: Any, **kwargs: Any) -> int:
+    def int_wrapper(*args: Any, **kwargs: Any) -> int:
         try:
             val = fn(*args, **kwargs)
         except Exception:
@@ -103,4 +103,4 @@ def safe_feature_int(fn: IntCallable) -> IntCallable:
 
         return int(val)
 
-    return cast(IntCallable, wrapper)
+    return cast(IntCallable, int_wrapper)
