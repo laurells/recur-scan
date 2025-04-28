@@ -5,6 +5,7 @@ import pytest
 from recur_scan.features_original import (
     get_amount_consistency_score,
     get_ends_in_99,
+    get_interval_cluster_score,
     get_interval_consistency_score,
     get_is_albert_99_recurring,
     get_is_always_recurring,
@@ -273,3 +274,13 @@ def test_get_interval_consistency_score() -> None:
     ]
     # Intervals: [9, 20], mode=20, not close to trusted targets, returns 0
     assert get_interval_consistency_score(trans2) == 0
+
+
+def test_get_interval_cluster_score() -> None:
+    """Test get_interval_cluster_score for various scenarios."""
+    trans3 = [
+        Transaction(id=1, user_id="user1", name="Single", amount=20.00, date="2023/01/01"),
+        Transaction(id=2, user_id="user1", name="Single", amount=20.00, date="2023/02/01"),
+    ]
+    # Intervals: [31], fewer than 2 intervals, returns 0.0
+    assert pytest.approx(get_interval_cluster_score(trans3)) == 0.0
