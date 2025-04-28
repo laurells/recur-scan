@@ -279,30 +279,19 @@ def get_amount_consistency_score(
     relative_tol: float = 0.05,
 ) -> float:
     """
-    Returns 1.0 if all positive amounts in merchant_trans are within either
-    absolute_tol or relative_tol of the mean; otherwise returns 0.0.
-    If there are fewer than 2 positive transactions, returns 0.0.
+    Hybrid score: returns fraction of amounts consistent.
     """
-    # Collect only strictly positive amounts
     amounts = [Decimal(str(t.amount)) for t in merchant_trans if t.amount > 0]
     if len(amounts) < 2:
         return 0.0
-
-    mean_amt = Decimal(sum(amounts) / len(amounts))
-    if mean_amt == 0:
-        return 0.0
-
-    abs_tol_d = Decimal(str(absolute_tol))
-    rel_tol_d = Decimal(str(relative_tol))
-
-    # If any amount deviates by more than both tolerances, it's not consistent
+    mean_amount = sum(amounts) / len(amounts)
+    mean_amt = Decimal(mean_amount)
+    consistent = 0
     for a in amounts:
         diff = abs(a - mean_amt)
-        if diff > abs_tol_d and (diff / mean_amt) > rel_tol_d:
-            return 0.0
-
-    # All amounts passed at least one tolerance check
-    return 1.0
+        if diff <= Decimal(str(absolute_tol)) or diff / mean_amt <= Decimal(str(relative_tol)):
+            consistent += 1
+    return consistent / len(amounts)
 
 
 @safe_feature
@@ -359,7 +348,7 @@ def get_is_recurring_same_amount_specific_intervals(merchant_trans: list[Transac
     if len(merchant_trans) < 2:
         return False
 
-    # Check if amounts are the same (within $0.05 tolerance for floating-point precision)
+    # Check if amounts are the same (within $0.05 tolerance)
     amounts = [t.amount for t in merchant_trans if t.amount is not None]
     if not amounts:
         return False
@@ -373,16 +362,15 @@ def get_is_recurring_same_amount_specific_intervals(merchant_trans: list[Transac
     if not intervals:
         return False
 
-    # Check if any interval matches the criteria: 27-45 days, 380 days, or 16 days (±1 day tolerance)
+    # Check if any interval matches the criteria
     has_matching_interval = any(
-        (27 <= interval <= 45)  # Expanded to capture 30-day intervals
-        or (379 <= interval <= 381)  # 380 days ± 1
-        or (15 <= interval <= 17)  # 16 days ± 1
+        (27 <= interval <= 45)  # Expanded window for monthly cycles
+        or (379 <= interval <= 381)  # Yearly
+        or (15 <= interval <= 17)  # Biweekly
         for interval in intervals
     )
 
-    # Return True if both conditions are met
-    return amounts_same and has_matching_interval
+    return has_matching_interval
 
 
 @safe_feature_int
@@ -399,6 +387,9 @@ def detect_monthly_with_missing_entries(merchant_trans: list[Transaction]) -> in
         intervals = _calc_month_intervals(merchant_trans)
         if not intervals:
             return 0
+
+        if len(intervals) >= 2 and all(0.8 <= i <= 1.2 for i in intervals):
+            return 1
 
         # Check if intervals are approximately 1 month (±0.2 months)
         monthly_intervals = all(0.7 <= interval <= 1.3 for interval in intervals)
