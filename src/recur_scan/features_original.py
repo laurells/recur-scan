@@ -9,33 +9,16 @@ from recur_scan.transactions import Transaction
 from recur_scan.utils import get_day, parse_date, safe_feature, safe_feature_bool, safe_feature_int
 
 
-def _calc_intervals(merchant_trans: list[Transaction]) -> list[int]:
-    dates = sorted(d for d in (parse_date(t.date) for t in merchant_trans) if d)
-    return [(dates[i] - dates[i - 1]).days for i in range(1, len(dates))]
+def _calc_intervals(transactions: list[Transaction]) -> list[int]:
+    sorted_trans = sorted(transactions, key=lambda t: t.date)
+    intervals = []
 
-
-def _calc_month_intervals(merchant_trans: list[Transaction]) -> list[float]:
-    dates = sorted(d for d in (parse_date(t.date) for t in merchant_trans) if d)
-    if len(dates) < 2:
-        return []
-
-    intervals: list[float] = []
-    for i in range(1, len(dates)):
-        date1, date2 = dates[i - 1], dates[i]
-        year_diff = date2.year - date1.year
-        month_diff = date2.month - date1.month
-        total_months = float(year_diff * 12 + month_diff)  # Fix: Ensure float type
-
-        # Simplified: only adjust if day difference is significant
-        day_diff = float(date2.day - date1.day)
-        if day_diff != 0.0:
-            # Approximate adjustment: treat as fraction of a 30-day month
-            total_months += day_diff / 30.0
-
-        if total_months < 0.1:
-            total_months = 0.0
-
-        intervals.append(total_months)
+    for i in range(1, len(sorted_trans)):
+        # Explicitly parse dates with YYYY/MM/DD format
+        prev_date = datetime.strptime(sorted_trans[i - 1].date, "%Y/%m/%d")
+        curr_date = datetime.strptime(sorted_trans[i].date, "%Y/%m/%d")
+        delta = curr_date - prev_date
+        intervals.append(abs(delta.days))  # Ensure positive intervals
 
     return intervals
 
@@ -276,12 +259,12 @@ def get_amount_consistency_score(
     return consistent / len(amounts)
 
 
-@safe_feature
-def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_days: int = 5) -> float:
+@safe_feature_int
+def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_days: int = 5) -> int:
     """Dynamic interval consistency using mode of observed intervals."""
     intervals = _calc_intervals(merchant_trans)
     if not intervals:
-        return 0.0
+        return 0
 
     # Find the mode interval
     interval_counts: dict[int, int] = {}
@@ -292,7 +275,7 @@ def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_
     # Check if the mode is close to a trusted target
     trusted_targets = [7, 14, 17, 28, 30, 31, 45, 60, 90, 180, 365, 380]
     if not any(abs(mode_interval - target) <= tolerance_days for target in trusted_targets):
-        return 0.0
+        return 0
 
     # Check if intervals are close to the mode
     consistent = 0
@@ -300,7 +283,9 @@ def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_
         if abs(i - mode_interval) <= tolerance_days:
             consistent += 1
 
-    return consistent / len(intervals)
+    # Return 1 if all intervals are consistent, 0 otherwise
+    consistency_ratio = consistent / len(intervals)
+    return 1 if consistency_ratio == 1.0 else 0
 
 
 @safe_feature
