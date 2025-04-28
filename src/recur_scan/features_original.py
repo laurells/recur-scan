@@ -274,30 +274,39 @@ def get_is_albert_99_recurring(transaction: Transaction) -> bool:
 
 @safe_feature
 def get_amount_consistency_score(
-    merchant_trans: list[Transaction], absolute_tol: float = 0.5, relative_tol: float = 0.05
+    merchant_trans: list[Transaction],
+    absolute_tol: float = 0.5,
+    relative_tol: float = 0.05,
 ) -> float:
-    """Hybrid absolute/relative amount consistency score."""
+    """
+    Returns 1.0 if all positive amounts in merchant_trans are within either
+    absolute_tol or relative_tol of the mean; otherwise returns 0.0.
+    If there are fewer than 2 positive transactions, returns 0.0.
+    """
+    # Collect only strictly positive amounts
     amounts = [Decimal(str(t.amount)) for t in merchant_trans if t.amount > 0]
     if len(amounts) < 2:
         return 0.0
 
-    mean_amount = sum(amounts) / len(amounts)
-    if mean_amount == 0:
+    mean_amt = Decimal(sum(amounts) / len(amounts))
+    if mean_amt == 0:
         return 0.0
 
-    consistent = 0
-    for a in amounts:
-        abs_diff = abs(a - Decimal(mean_amount))
-        if abs_diff <= Decimal(str(absolute_tol)) or abs_diff / Decimal(mean_amount) <= Decimal(
-            str(relative_tol)
-        ):  # Absolute tolerance
-            consistent += 1
+    abs_tol_d = Decimal(str(absolute_tol))
+    rel_tol_d = Decimal(str(relative_tol))
 
-    return consistent / len(amounts)
+    # If any amount deviates by more than both tolerances, it's not consistent
+    for a in amounts:
+        diff = abs(a - mean_amt)
+        if diff > abs_tol_d and (diff / mean_amt) > rel_tol_d:
+            return 0.0
+
+    # All amounts passed at least one tolerance check
+    return 1.0
 
 
 @safe_feature
-def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_days: int = 10) -> float:
+def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_days: int = 5) -> float:
     """Dynamic interval consistency using mode of observed intervals."""
     intervals = _calc_intervals(merchant_trans)
     if not intervals:
@@ -306,15 +315,19 @@ def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_
     # Find most common interval
     interval_counts: dict[int, int] = {}
     for interval in intervals:
-        interval_counts[interval] += 1
-    # mode_interval = max(interval_counts, key=interval_counts.get, default=0)
+        interval_counts[interval] = interval_counts.get(interval, 0) + 1
+
     mode_interval = max(interval_counts.keys(), key=lambda k: interval_counts[k], default=0)
 
-    # Score based on mode and common recurring intervals
+    # If mode interval is close to common known periods, trust it
+    trusted_targets = [7, 14, 17, 28, 30, 31, 45, 60, 90, 180, 365, 380]
+
     consistent = 0
     for i in intervals:
-        if abs(i - mode_interval) <= tolerance_days or any(
-            abs(i - target) <= tolerance_days for target in [45, 17, 380]
+        # Check if close to known trusted targets
+        if any(abs(i - target) <= tolerance_days for target in trusted_targets) or (
+            abs(i - mode_interval) <= tolerance_days
+            and any(abs(mode_interval - target) <= tolerance_days for target in trusted_targets)
         ):
             consistent += 1
 
@@ -329,17 +342,14 @@ def get_combined_recurrence_score(transaction: Transaction, merchant_trans: list
     amount_score = get_amount_consistency_score(merchant_trans)
     interval_score = get_interval_consistency_score(merchant_trans)
 
-    # Balanced weights: reduce vendor score influence
-    # vendor, non-recurring vendor (negative), amount, interval
-    weights = [0.3, -0.3, 0.4, 0.3]
+    weights = [0.0, -0.3, 0.4, 0.3]
     score = (
         weights[0] * vendor_score
-        + weights[1] * non_recurring_vendor_score  # Subtract if non-recurring
+        + weights[1] * non_recurring_vendor_score
         + weights[2] * amount_score
         + weights[3] * interval_score
     )
 
-    # Normalize to [0, 1]
     return max(0.0, min(1.0, score))
 
 
@@ -391,7 +401,7 @@ def detect_monthly_with_missing_entries(merchant_trans: list[Transaction]) -> in
             return 0
 
         # Check if intervals are approximately 1 month (±0.2 months)
-        monthly_intervals = all(0.8 <= interval <= 1.2 for interval in intervals)
+        monthly_intervals = all(0.7 <= interval <= 1.3 for interval in intervals)
         if not monthly_intervals:
             return 0
 
