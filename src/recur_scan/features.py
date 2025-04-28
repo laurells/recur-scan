@@ -1,4 +1,6 @@
 from collections import defaultdict
+from datetime import date, datetime
+from functools import lru_cache
 
 from recur_scan.features_adedotun import (
     compute_recurring_inputs_at,
@@ -515,6 +517,12 @@ from recur_scan.features_yoloye import (
 )
 from recur_scan.transactions import Transaction
 from recur_scan.utils import parse_date
+
+
+@lru_cache(maxsize=1024)
+def _parse_date(date_str: str) -> date:
+    """Parse a date string into a datetime.date object."""
+    return datetime.strptime(date_str, "%Y-%m-%d").date()
 
 
 def get_features(transaction: Transaction, all_transactions: list[Transaction]) -> dict[str, float | int | bool]:
