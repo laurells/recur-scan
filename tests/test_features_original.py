@@ -178,9 +178,9 @@ def test_get_is_amazon_prime() -> None:
 
 def test_get_is_known_recurring_vendor() -> None:
     """Test get_is_known_recurring_vendor."""
-    trans1 = Transaction("Netflix", 15.99, "01/01/2023")
-    trans2 = Transaction("Walmart", 50.00, "01/01/2023")
-    trans3 = Transaction("NETFLIX", 15.99, "01/01/2023")
+    trans1 = Transaction(name="Netflix", amount=15.99, date="01/01/2023")
+    trans2 = Transaction(name="Walmart", amount=50.00, date="01/01/2023")
+    trans3 = Transaction(name="NETFLIX", amount=15.99, date="01/01/2023")
     assert get_is_known_recurring_vendor(trans1) is True
     assert get_is_known_recurring_vendor(trans2) is False
     assert get_is_known_recurring_vendor(trans3) is True
@@ -188,9 +188,9 @@ def test_get_is_known_recurring_vendor() -> None:
 
 def test_get_is_known_non_recurring_vendor() -> None:
     """Test get_is_known_non_recurring_vendor."""
-    trans1 = Transaction("Walmart", 50.00, "01/01/2023")
-    trans2 = Transaction("Netflix", 15.99, "01/01/2023")
-    trans3 = Transaction("Star Bucks", 5.00, "01/01/2023")
+    trans1 = Transaction(name="Walmart", amount=50.00, date="01/01/2023")
+    trans2 = Transaction(name="Netflix", amount=15.99, date="01/01/2023")
+    trans3 = Transaction(name="Star Bucks", amount=5.00, date="01/01/2023")
     assert get_is_known_non_recurring_vendor(trans1) is True
     assert get_is_known_non_recurring_vendor(trans2) is False
     assert get_is_known_non_recurring_vendor(trans3) is True
@@ -199,16 +199,19 @@ def test_get_is_known_non_recurring_vendor() -> None:
 def test_get_same_amount_count() -> None:
     """Test get_same_amount_count."""
     trans1 = [
-        Transaction("Test", 10.00, "01/01/2023"),
-        Transaction("Test", 10.00, "02/01/2023"),
-        Transaction("Test", 10.00, "03/01/2023"),
+        Transaction(name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(name="Test", amount=10.00, date="02/01/2023"),
+        Transaction(name="Test", amount=10.00, date="03/01/2023"),
     ]
     trans2 = [
-        Transaction("Test", 10.00, "01/01/2023"),
-        Transaction("Test", 10.09, "02/01/2023"),
-        Transaction("Test", 9.91, "03/01/2023"),
+        Transaction(name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(name="Test", amount=10.09, date="02/01/2023"),
+        Transaction(name="Test", amount=9.91, date="03/01/2023"),
     ]
-    trans3 = [Transaction("Test", 10.00, "01/01/2023"), Transaction("Test", 11.00, "02/01/2023")]
+    trans3 = [
+        Transaction(name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(name="Test", amount=11.00, date="02/01/2023"),
+    ]
     assert get_same_amount_count(trans1) == 3
     assert get_same_amount_count(trans2) == 3
     assert get_same_amount_count(trans3) == 1
@@ -217,10 +220,10 @@ def test_get_same_amount_count() -> None:
 
 def test_get_is_albert_99_recurring() -> None:
     """Test get_is_albert_99_recurring."""
-    trans1 = Transaction("Albert Subscription", 1.99, "01/01/2023")
-    trans2 = Transaction("Albert Subscription", 1.50, "01/01/2023")
-    trans3 = Transaction("Netflix", 1.99, "01/01/2023")
-    trans4 = Transaction("ALBERT SUB", 1.99, "01/01/2023")
+    trans1 = Transaction(amount=1.99, date="01/01/2023")
+    trans2 = Transaction(amount=1.50, date="01/01/2023")
+    trans3 = Transaction(name="Netflix", amount=1.99, date="01/01/2023")
+    trans4 = Transaction(name="ALBERT SUB", amount=1.99, date="01/01/2023")
     assert get_is_albert_99_recurring(trans1) is True
     assert get_is_albert_99_recurring(trans2) is False
     assert get_is_albert_99_recurring(trans3) is False
@@ -230,21 +233,24 @@ def test_get_is_albert_99_recurring() -> None:
 def test_get_amount_consistency_score() -> None:
     """Test get_amount_consistency_score."""
     trans1 = [
-        Transaction("Test", 10.00, "01/01/2023"),
-        Transaction("Test", 10.00, "02/01/2023"),
-        Transaction("Test", 10.00, "03/01/2023"),
+        Transaction(name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(name="Test", amount=10.00, date="02/01/2023"),
+        Transaction(name="Test", amount=10.00, date="03/01/2023"),
     ]
     trans2 = [
-        Transaction("Test", 10.00, "01/01/2023"),
-        Transaction("Test", 10.40, "02/01/2023"),
-        Transaction("Test", 10.30, "03/01/2023"),
+        Transaction(name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(name="Test", amount=10.40, date="02/01/2023"),
+        Transaction(name="Test", amount=10.30, date="03/01/2023"),
     ]
     trans3 = [
-        Transaction("Test", 50.00, "01/01/2023"),
-        Transaction("Test", 55.00, "02/01/2023"),
-        Transaction("Test", 60.00, "03/01/2023"),
+        Transaction(name="Test", amount=50.00, date="01/01/2023"),
+        Transaction(name="Test", amount=55.00, date="02/01/2023"),
+        Transaction(name="Test", amount=60.00, date="03/01/2023"),
     ]
-    trans4 = [Transaction("Test", 0.00, "01/01/2023"), Transaction("Test", 0.00, "02/01/2023")]
+    trans4 = [
+        Transaction(name="Test", amount=0.00, date="01/01/2023"),
+        Transaction(name="Test", amount=0.00, date="02/01/2023"),
+    ]
     assert get_amount_consistency_score(trans1) == 1.0
     assert get_amount_consistency_score(trans2) == 1.0
     assert get_amount_consistency_score(trans3) == 0.0
@@ -255,20 +261,23 @@ def test_get_amount_consistency_score() -> None:
 def test_get_interval_consistency_score() -> None:
     """Test get_interval_consistency_score."""
     trans1 = [
-        Transaction("Netflix", 15.99, "01/01/2023"),
-        Transaction("Netflix", 15.99, "02/01/2023"),
-        Transaction("Netflix", 15.99, "03/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="01/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="02/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="03/01/2023"),
     ]
     trans2 = [
-        Transaction("Gym", 20.00, "01/01/2023"),
-        Transaction("Gym", 20.00, "01/15/2023"),
-        Transaction("Gym", 20.00, "01/29/2023"),
+        Transaction(name="Gym", amount=20.00, date="01/01/2023"),
+        Transaction(name="Gym", amount=20.00, date="01/15/2023"),
+        Transaction(name="Gym", amount=20.00, date="01/29/2023"),
     ]
-    trans3 = [Transaction("Membership", 100.00, "01/01/2023"), Transaction("Membership", 100.00, "01/01/2024")]
+    trans3 = [
+        Transaction(name="Membership", amount=100.00, date="01/01/2023"),
+        Transaction(name="Membership", amount=100.00, date="01/01/2024"),
+    ]
     trans4 = [
-        Transaction("Test", 10.00, "01/01/2023"),
-        Transaction("Test", 10.00, "01/15/2023"),
-        Transaction("Test", 10.00, "02/15/2023"),
+        Transaction(name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(name="Test", amount=10.00, date="02/01/2023"),
+        Transaction(name="Test", amount=10.00, date="03/01/2023"),
     ]
     assert pytest.approx(get_interval_consistency_score(trans1)) == 0.5
     assert get_interval_consistency_score(trans2) == 1.0
@@ -280,19 +289,19 @@ def test_get_interval_consistency_score() -> None:
 def test_get_combined_recurrence_score() -> None:
     """Test get_combined_recurrence_score."""
     trans1 = [
-        Transaction("Netflix", 15.99, "01/01/2023"),
-        Transaction("Netflix", 15.99, "02/01/2023"),
-        Transaction("Netflix", 15.99, "03/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="01/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="02/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="03/01/2023"),
     ]
     trans2 = [
-        Transaction("Walmart", 15.99, "01/01/2023"),
-        Transaction("Walmart", 15.99, "02/01/2023"),
-        Transaction("Walmart", 15.99, "03/01/2023"),
+        Transaction(name="Walmart", amount=15.99, date="01/01/2023"),
+        Transaction(name="Walmart", amount=15.99, date="02/01/2023"),
+        Transaction(name="Walmart", amount=15.99, date="03/01/2023"),
     ]
     trans3 = [
-        Transaction("Netflix", 50.00, "01/01/2023"),
-        Transaction("Netflix", 55.00, "02/01/2023"),
-        Transaction("Netflix", 60.00, "03/01/2023"),
+        Transaction(name="Netflix", amount=50.00, date="01/01/2023"),
+        Transaction(name="Netflix", amount=55.00, date="02/01/2023"),
+        Transaction(name="Netflix", amount=60.00, date="03/01/2023"),
     ]
     assert pytest.approx(get_combined_recurrence_score(trans1[0], trans1)) == 0.85
     assert pytest.approx(get_combined_recurrence_score(trans2[0], trans2)) == 0.25
@@ -303,20 +312,20 @@ def test_get_combined_recurrence_score() -> None:
 def test_get_is_recurring_same_amount_specific_intervals() -> None:
     """Test get_is_recurring_same_amount_specific_intervals."""
     trans1 = [
-        Transaction("Netflix", 15.99, "01/01/2023"),
-        Transaction("Netflix", 15.99, "02/01/2023"),
-        Transaction("Netflix", 15.99, "03/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="01/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="02/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="03/01/2023"),
     ]
     trans2 = [
-        Transaction("Gym", 20.00, "01/01/2023"),
-        Transaction("Gym", 20.00, "01/15/2023"),
-        Transaction("Gym", 20.00, "01/29/2023"),
+        Transaction(name="Gym", amount=20.00, date="01/01/2023"),
+        Transaction(name="Gym", amount=20.00, date="01/15/2023"),
+        Transaction(name="Gym", amount=20.00, date="01/29/2023"),
     ]
     trans3 = [Transaction("Membership", 100.00, "01/01/2023"), Transaction("Membership", 100.00, "01/01/2024")]
     trans4 = [
-        Transaction("Utility", 50.00, "01/01/2023"),
-        Transaction("Utility", 55.00, "02/01/2023"),
-        Transaction("Utility", 60.00, "03/01/2023"),
+        Transaction(name="Utility", amount=50.00, date="01/01/2023"),
+        Transaction(name="Utility", amount=55.00, date="02/01/2023"),
+        Transaction(name="Utility", amount=60.00, date="03/01/2023"),
     ]
     assert get_is_recurring_same_amount_specific_intervals(trans1) is True
     assert get_is_recurring_same_amount_specific_intervals(trans2) is True
@@ -328,15 +337,18 @@ def test_get_is_recurring_same_amount_specific_intervals() -> None:
 def test_detect_monthly_with_missing_entries() -> None:
     """Test detect_monthly_with_missing_entries."""
     trans1 = [
-        Transaction("Netflix", 15.99, "01/01/2023"),
-        Transaction("Netflix", 15.99, "02/01/2023"),
-        Transaction("Netflix", 15.99, "03/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="01/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="02/01/2023"),
+        Transaction(name="Netflix", amount=15.99, date="03/01/2023"),
     ]
-    trans2 = [Transaction("Test", 10.00, "01/01/2023"), Transaction("Test", 10.00, "03/01/2023")]
+    trans2 = [
+        Transaction(name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(name="Test", amount=10.00, date="03/01/2023"),
+    ]
     trans3 = [
-        Transaction("Utility", 50.00, "01/01/2023"),
-        Transaction("Utility", 55.00, "02/01/2023"),
-        Transaction("Utility", 60.00, "03/01/2023"),
+        Transaction(name="Utility", amount=50.00, date="01/01/2023"),
+        Transaction(name="Utility", amount=55.00, date="02/01/2023"),
+        Transaction(name="Utility", amount=60.00, date="03/01/2023"),
     ]
     assert detect_monthly_with_missing_entries(trans1) == 1
     assert detect_monthly_with_missing_entries(trans2) == 0
