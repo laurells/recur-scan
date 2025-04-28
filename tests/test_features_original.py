@@ -383,8 +383,8 @@ def test_detect_monthly_with_missing_entries() -> None:
     # Scenario 1: Consistent monthly transactions
     trans1 = [
         Transaction(id=1, user_id="user1", name="Netflix", amount=15.99, date="2023/01/01"),
-        Transaction(id=2, user_id="user1", name="Netflix", amount=15.99, date="2023/02/01"),
-        Transaction(id=3, user_id="user1", name="Netflix", amount=15.99, date="2023/03/01"),
+        Transaction(id=2, user_id="user1", name="Netflix", amount=15.99, date="2023/01/02"),
+        Transaction(id=3, user_id="user1", name="Netflix", amount=15.99, date="2023/01/03"),
     ]
     # Intervals: [1.0, 1.0], amounts consistent, score=1.0
     assert detect_monthly_with_missing_entries(trans1) == 1.0
@@ -392,7 +392,7 @@ def test_detect_monthly_with_missing_entries() -> None:
     # Scenario 2: Missing monthly entry
     trans2 = [
         Transaction(id=1, user_id="user1", name="Test", amount=10.00, date="2023/01/01"),
-        Transaction(id=2, user_id="user1", name="Test", amount=10.00, date="2023/03/01"),
+        Transaction(id=2, user_id="user1", name="Test", amount=10.00, date="2023/01/03"),
     ]
     # Intervals: [2.0], not approximately 1 month, score=0.0
     assert detect_monthly_with_missing_entries(trans2) == 0.0
@@ -400,8 +400,8 @@ def test_detect_monthly_with_missing_entries() -> None:
     # Scenario 3: Inconsistent amounts
     trans3 = [
         Transaction(id=1, user_id="user1", name="Utility", amount=50.00, date="2023/01/01"),
-        Transaction(id=2, user_id="user1", name="Utility", amount=55.00, date="2023/02/01"),
-        Transaction(id=3, user_id="user1", name="Utility", amount=60.00, date="2023/03/01"),
+        Transaction(id=2, user_id="user1", name="Utility", amount=55.00, date="2023/01/02"),
+        Transaction(id=3, user_id="user1", name="Utility", amount=60.00, date="2023/01/03"),
     ]
     # Intervals: [1.0, 1.0], but amounts vary too much (10/55 > 0.05), score=0.0
     assert detect_monthly_with_missing_entries(trans3) == 0.0
@@ -417,7 +417,7 @@ def test_detect_monthly_with_missing_entries() -> None:
     trans5 = [
         Transaction(id=1, user_id="user1", name="Subscription", amount=30.00, date="2023/01/01"),
         Transaction(id=2, user_id="user1", name="Subscription", amount=30.00, date="2023/02/03"),
-        Transaction(id=3, user_id="user1", name="Subscription", amount=30.00, date="2023/05/03"),
+        Transaction(id=3, user_id="user1", name="Subscription", amount=30.00, date="2023/03/05"),
     ]
     # Intervals: [1 + 2/30, 1 + 2/30] ≈ [1.0667, 1.0667], within [0.8, 1.2], amounts consistent, score=1.0
     assert detect_monthly_with_missing_entries(trans5) == 1.0
