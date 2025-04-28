@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 
 import numpy as np
@@ -11,13 +11,10 @@ from recur_scan.utils import get_day, parse_date, safe_feature, safe_feature_boo
 
 def _calc_intervals(merchant_trans: list[Transaction]) -> list[int]:
     dates = sorted(d for d in (parse_date(t.date) for t in merchant_trans) if d)
-    # if len(dates) < 2:
-    #     return []
     return [(dates[i] - dates[i - 1]).days for i in range(1, len(dates))]
 
 
 def _calc_month_intervals(merchant_trans: list[Transaction]) -> list[float]:
-    """Calculate intervals between transactions in months."""
     dates = sorted(d for d in (parse_date(t.date) for t in merchant_trans) if d)
     if len(dates) < 2:
         return []
@@ -27,28 +24,13 @@ def _calc_month_intervals(merchant_trans: list[Transaction]) -> list[float]:
         date1, date2 = dates[i - 1], dates[i]
         year_diff = date2.year - date1.year
         month_diff = date2.month - date1.month
-        total_months: float = year_diff * 12 + month_diff
-        day_diff = date2.day - date1.day
-        if day_diff != 0:
-            next_month = date1.month % 12 + 1
-            next_year = date1.year + (date1.month // 12)
-            last_day = date1.replace(day=28, month=next_month, year=next_year)
-            while last_day.month == next_month:  # Find the last day of date1's month
-                last_day += timedelta(days=1)
-            last_day -= timedelta(days=1)
-            days_in_month = (last_day - date1.replace(day=1)).days + 1
+        total_months = float(year_diff * 12 + month_diff)  # Fix: Ensure float type
 
-            if day_diff < 0:
-                total_months -= 1
-                remaining_days = (date2 - date1.replace(day=date2.day)).days
-                day_fraction = remaining_days / days_in_month
-                total_months += day_fraction
-            elif day_diff > 0:
-                next_month_date = date1.replace(day=1, month=next_month, year=next_year)
-                while next_month_date.day != date1.day and next_month_date.day <= 28:
-                    next_month_date = next_month_date.replace(day=next_month_date.day + 1)
-                day_fraction = (date2 - next_month_date).days / days_in_month
-                total_months += day_fraction
+        # Simplified: only adjust if day difference is significant
+        day_diff = float(date2.day - date1.day)
+        if day_diff != 0.0:
+            # Approximate adjustment: treat as fraction of a 30-day month
+            total_months += day_diff / 30.0
 
         if total_months < 0.1:
             total_months = 0.0
