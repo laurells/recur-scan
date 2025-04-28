@@ -18,7 +18,7 @@ from recur_scan.transactions import group_transactions, read_test_transactions, 
 # %%
 # configure the script
 
-model_dir = "model dir"  # directory containing model.joblib and dict_vectorizer.joblib
+model_dir = "C:/Users/User/Desktop/recur-scan/scripts"  # directory containing model.joblib and dict_vectorizer.joblib
 in_dir = "test files"
 out_dir = "output directory"
 n_jobs = -1  # number of jobs to run in parallel

@@ -3,11 +3,19 @@
 import pytest
 
 from recur_scan.features_original import (
+    detect_monthly_with_missing_entries,
+    get_amount_consistency_score,
+    get_combined_recurrence_score,
     get_ends_in_99,
+    get_interval_consistency_score,
+    get_is_albert_99_recurring,
     get_is_always_recurring,
     get_is_amazon_prime,
     get_is_insurance,
+    get_is_known_non_recurring_vendor,
+    get_is_known_recurring_vendor,
     get_is_phone,
+    get_is_recurring_same_amount_specific_intervals,
     get_is_utility,
     get_n_transactions_days_apart,
     get_n_transactions_same_amount,
@@ -15,6 +23,7 @@ from recur_scan.features_original import (
     get_pct_transactions_days_apart,
     get_pct_transactions_same_day,
     get_percent_transactions_same_amount,
+    get_same_amount_count,
     get_transaction_z_score,
 )
 from recur_scan.transactions import Transaction
@@ -165,3 +174,171 @@ def test_get_is_amazon_prime():
     """Test get_is_amazon_prime."""
     assert get_is_amazon_prime(Transaction(id=1, user_id="user1", name="amazon prime", amount=100, date="2024-01-01"))
     assert not get_is_amazon_prime(Transaction(id=2, user_id="user1", name="netflix", amount=100, date="2024-01-01"))
+
+
+def test_get_is_known_recurring_vendor():
+    """Test get_is_known_recurring_vendor."""
+    trans1 = Transaction("Netflix", 15.99, "01/01/2023")
+    trans2 = Transaction("Walmart", 50.00, "01/01/2023")
+    trans3 = Transaction("NETFLIX", 15.99, "01/01/2023")
+    assert get_is_known_recurring_vendor(trans1) is True
+    assert get_is_known_recurring_vendor(trans2) is False
+    assert get_is_known_recurring_vendor(trans3) is True
+
+
+def test_get_is_known_non_recurring_vendor():
+    """Test get_is_known_non_recurring_vendor."""
+    trans1 = Transaction("Walmart", 50.00, "01/01/2023")
+    trans2 = Transaction("Netflix", 15.99, "01/01/2023")
+    trans3 = Transaction("Star Bucks", 5.00, "01/01/2023")
+    assert get_is_known_non_recurring_vendor(trans1) is True
+    assert get_is_known_non_recurring_vendor(trans2) is False
+    assert get_is_known_non_recurring_vendor(trans3) is True
+
+
+def test_get_same_amount_count():
+    """Test get_same_amount_count."""
+    trans1 = [
+        Transaction("Test", 10.00, "01/01/2023"),
+        Transaction("Test", 10.00, "02/01/2023"),
+        Transaction("Test", 10.00, "03/01/2023"),
+    ]
+    trans2 = [
+        Transaction("Test", 10.00, "01/01/2023"),
+        Transaction("Test", 10.09, "02/01/2023"),
+        Transaction("Test", 9.91, "03/01/2023"),
+    ]
+    trans3 = [Transaction("Test", 10.00, "01/01/2023"), Transaction("Test", 11.00, "02/01/2023")]
+    assert get_same_amount_count(trans1) == 3
+    assert get_same_amount_count(trans2) == 3
+    assert get_same_amount_count(trans3) == 1
+    assert get_same_amount_count([]) == 0
+
+
+def test_get_is_albert_99_recurring():
+    """Test get_is_albert_99_recurring."""
+    trans1 = Transaction("Albert Subscription", 1.99, "01/01/2023")
+    trans2 = Transaction("Albert Subscription", 1.50, "01/01/2023")
+    trans3 = Transaction("Netflix", 1.99, "01/01/2023")
+    trans4 = Transaction("ALBERT SUB", 1.99, "01/01/2023")
+    assert get_is_albert_99_recurring(trans1) is True
+    assert get_is_albert_99_recurring(trans2) is False
+    assert get_is_albert_99_recurring(trans3) is False
+    assert get_is_albert_99_recurring(trans4) is True
+
+
+def test_get_amount_consistency_score():
+    """Test get_amount_consistency_score."""
+    trans1 = [
+        Transaction("Test", 10.00, "01/01/2023"),
+        Transaction("Test", 10.00, "02/01/2023"),
+        Transaction("Test", 10.00, "03/01/2023"),
+    ]
+    trans2 = [
+        Transaction("Test", 10.00, "01/01/2023"),
+        Transaction("Test", 10.40, "02/01/2023"),
+        Transaction("Test", 10.30, "03/01/2023"),
+    ]
+    trans3 = [
+        Transaction("Test", 50.00, "01/01/2023"),
+        Transaction("Test", 55.00, "02/01/2023"),
+        Transaction("Test", 60.00, "03/01/2023"),
+    ]
+    trans4 = [Transaction("Test", 0.00, "01/01/2023"), Transaction("Test", 0.00, "02/01/2023")]
+    assert get_amount_consistency_score(trans1) == 1.0
+    assert get_amount_consistency_score(trans2) == 1.0
+    assert get_amount_consistency_score(trans3) == 0.0
+    assert get_amount_consistency_score(trans4) == 0.0
+    assert get_amount_consistency_score([]) == 0.0
+
+
+def test_get_interval_consistency_score():
+    """Test get_interval_consistency_score."""
+    trans1 = [
+        Transaction("Netflix", 15.99, "01/01/2023"),
+        Transaction("Netflix", 15.99, "02/01/2023"),
+        Transaction("Netflix", 15.99, "03/01/2023"),
+    ]
+    trans2 = [
+        Transaction("Gym", 20.00, "01/01/2023"),
+        Transaction("Gym", 20.00, "01/15/2023"),
+        Transaction("Gym", 20.00, "01/29/2023"),
+    ]
+    trans3 = [Transaction("Membership", 100.00, "01/01/2023"), Transaction("Membership", 100.00, "01/01/2024")]
+    trans4 = [
+        Transaction("Test", 10.00, "01/01/2023"),
+        Transaction("Test", 10.00, "01/15/2023"),
+        Transaction("Test", 10.00, "02/15/2023"),
+    ]
+    assert pytest.approx(get_interval_consistency_score(trans1)) == 0.5
+    assert get_interval_consistency_score(trans2) == 1.0
+    assert get_interval_consistency_score(trans3) == 1.0
+    assert get_interval_consistency_score(trans4) == 0.0
+    assert get_interval_consistency_score([]) == 0.0
+
+
+def test_get_combined_recurrence_score():
+    """Test get_combined_recurrence_score."""
+    trans1 = [
+        Transaction("Netflix", 15.99, "01/01/2023"),
+        Transaction("Netflix", 15.99, "02/01/2023"),
+        Transaction("Netflix", 15.99, "03/01/2023"),
+    ]
+    trans2 = [
+        Transaction("Walmart", 15.99, "01/01/2023"),
+        Transaction("Walmart", 15.99, "02/01/2023"),
+        Transaction("Walmart", 15.99, "03/01/2023"),
+    ]
+    trans3 = [
+        Transaction("Netflix", 50.00, "01/01/2023"),
+        Transaction("Netflix", 55.00, "02/01/2023"),
+        Transaction("Netflix", 60.00, "03/01/2023"),
+    ]
+    assert pytest.approx(get_combined_recurrence_score(trans1[0], trans1)) == 0.85
+    assert pytest.approx(get_combined_recurrence_score(trans2[0], trans2)) == 0.25
+    assert pytest.approx(get_combined_recurrence_score(trans3[0], trans3)) == 0.45
+    assert get_combined_recurrence_score(trans1[0], []) == 0.0
+
+
+def test_get_is_recurring_same_amount_specific_intervals():
+    """Test get_is_recurring_same_amount_specific_intervals."""
+    trans1 = [
+        Transaction("Netflix", 15.99, "01/01/2023"),
+        Transaction("Netflix", 15.99, "02/01/2023"),
+        Transaction("Netflix", 15.99, "03/01/2023"),
+    ]
+    trans2 = [
+        Transaction("Gym", 20.00, "01/01/2023"),
+        Transaction("Gym", 20.00, "01/15/2023"),
+        Transaction("Gym", 20.00, "01/29/2023"),
+    ]
+    trans3 = [Transaction("Membership", 100.00, "01/01/2023"), Transaction("Membership", 100.00, "01/01/2024")]
+    trans4 = [
+        Transaction("Utility", 50.00, "01/01/2023"),
+        Transaction("Utility", 55.00, "02/01/2023"),
+        Transaction("Utility", 60.00, "03/01/2023"),
+    ]
+    assert get_is_recurring_same_amount_specific_intervals(trans1) is True
+    assert get_is_recurring_same_amount_specific_intervals(trans2) is True
+    assert get_is_recurring_same_amount_specific_intervals(trans3) is False
+    assert get_is_recurring_same_amount_specific_intervals(trans4) is False
+    assert get_is_recurring_same_amount_specific_intervals([]) is False
+
+
+def test_detect_monthly_with_missing_entries():
+    """Test detect_monthly_with_missing_entries."""
+    trans1 = [
+        Transaction("Netflix", 15.99, "01/01/2023"),
+        Transaction("Netflix", 15.99, "02/01/2023"),
+        Transaction("Netflix", 15.99, "03/01/2023"),
+    ]
+    trans2 = [Transaction("Test", 10.00, "01/01/2023"), Transaction("Test", 10.00, "03/01/2023")]
+    trans3 = [
+        Transaction("Utility", 50.00, "01/01/2023"),
+        Transaction("Utility", 55.00, "02/01/2023"),
+        Transaction("Utility", 60.00, "03/01/2023"),
+    ]
+    assert detect_monthly_with_missing_entries(trans1) == 1
+    assert detect_monthly_with_missing_entries(trans2) == 0
+    assert detect_monthly_with_missing_entries(trans3) == 0
+    assert detect_monthly_with_missing_entries([]) == 0

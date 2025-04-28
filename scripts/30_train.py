@@ -40,9 +40,9 @@ search_type = "random"  # "grid" or "random"
 n_hpo_iters = 200  # number of hyperparameter optimization iterations
 n_jobs = -1  # number of jobs to run in parallel (set to 1 if your laptop gets too hot)
 
-in_path = "training file"
-precomputed_features_path = "precomputed features file"
-out_dir = "output directory"
+in_path = "C:/Users/User/Downloads/recur_scan_train-train-1.csv"
+precomputed_features_path = "C:/Users/User/Documents/train_features.csv"
+out_dir = "C:/Users/User/Downloads/output"
 
 # %%
 # parse script arguments from command line

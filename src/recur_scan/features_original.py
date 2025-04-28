@@ -1,9 +1,203 @@
+import math
 import re
+from collections.abc import Callable
+from datetime import datetime, timedelta
+from decimal import Decimal
+from functools import wraps
+from typing import Any, TypeVar, cast
 
 import numpy as np
 
+from recur_scan.features_laurels import _aggregate_transactions
 from recur_scan.transactions import Transaction
 from recur_scan.utils import get_day, parse_date
+
+F = TypeVar("F", bound=Callable[..., float])
+B = TypeVar("B", bound=Callable[..., bool])
+IntCallable = TypeVar("IntCallable", bound=Callable[..., int])
+
+
+def safe_feature(fn: F) -> F:
+    """
+    Decorator that:
+     - Catches exceptions and returns 0.0
+     - Converts infinities/NaNs to 0.0
+     - Clips any negative or zero values to 0.0
+    """
+
+    @wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> float:
+        try:
+            val = fn(*args, **kwargs)
+        except Exception:
+            return 0.0
+
+        # Convert non-numeric to 0
+        if not isinstance(val, int | float | np.floating | np.integer):
+            return 0.0
+
+        # Handle NaN or infinite
+        if isinstance(val, float | np.floating) and not math.isfinite(val):
+            return 0.0
+
+        # Enforce non-negativity
+        if val <= 0.0:
+            return 0.0
+
+        return float(val)
+
+    return cast(F, wrapper)
+
+
+def safe_feature_bool(fn: B) -> B:
+    """
+    Decorator for boolean functions that:
+     - Catches exceptions and returns False
+     - Ensures the return value is a boolean
+    """
+
+    @wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> bool:
+        try:
+            val = fn(*args, **kwargs)
+        except Exception:
+            return False
+
+        return bool(val)
+
+    return cast(B, wrapper)
+
+
+def safe_feature_int(fn: IntCallable) -> IntCallable:
+    """
+    Decorator for integer-returning functions that:
+     - Catches exceptions and returns 0
+     - Converts infinities/NaNs to 0
+     - Clips any negative or zero values to 0
+    """
+
+    @wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> int:
+        try:
+            val = fn(*args, **kwargs)
+        except Exception:
+            return 0
+
+        # Convert non-numeric to 0
+        if not isinstance(val, int | float | np.floating | np.integer):
+            return 0
+
+        # Handle NaN or infinite
+        if isinstance(val, float | np.floating) and not math.isfinite(val):
+            return 0
+
+        # Enforce non-negativity
+        if val <= 0:
+            return 0
+
+        return int(val)
+
+    return cast(IntCallable, wrapper)
+
+
+def _calc_intervals(merchant_trans: list[Transaction]) -> list[int]:
+    dates = sorted(d for d in (parse_date(t.date) for t in merchant_trans) if d)
+    # if len(dates) < 2:
+    #     return []
+    return [(dates[i] - dates[i - 1]).days for i in range(1, len(dates))]
+
+
+def _calc_month_intervals(merchant_trans: list[Transaction]) -> list[float]:
+    """Calculate intervals between transactions in months."""
+    dates = sorted(d for d in (parse_date(t.date) for t in merchant_trans) if d)
+    if len(dates) < 2:
+        return []
+
+    intervals: list[float] = []
+    for i in range(1, len(dates)):
+        date1, date2 = dates[i - 1], dates[i]
+        year_diff = date2.year - date1.year
+        month_diff = date2.month - date1.month
+        total_months: float = year_diff * 12 + month_diff
+        day_diff = date2.day - date1.day
+        if day_diff != 0:
+            next_month = date1.month % 12 + 1
+            next_year = date1.year + (date1.month // 12)
+            last_day = date1.replace(day=28, month=next_month, year=next_year)
+            while last_day.month == next_month:  # Find the last day of date1's month
+                last_day += timedelta(days=1)
+            last_day -= timedelta(days=1)
+            days_in_month = (last_day - date1.replace(day=1)).days + 1
+
+            if day_diff < 0:
+                total_months -= 1
+                remaining_days = (date2 - date1.replace(day=date2.day)).days
+                day_fraction = remaining_days / days_in_month
+                total_months += day_fraction
+            elif day_diff > 0:
+                next_month_date = date1.replace(day=1, month=next_month, year=next_year)
+                while next_month_date.day != date1.day and next_month_date.day <= 28:
+                    next_month_date = next_month_date.replace(day=next_month_date.day + 1)
+                day_fraction = (date2 - next_month_date).days / days_in_month
+                total_months += day_fraction
+
+        if total_months < 0.1:
+            total_months = 0.0
+
+        intervals.append(total_months)
+
+    return intervals
+
+
+def _normalize_name(name: str) -> str:
+    """Normalize vendor names for consistent matching."""
+    return name.strip().lower().replace(" ", "").replace("-", "").replace("_", "")
+
+
+# --- Vendor Classification ---
+RECURRING_VENDORS = {
+    "netflix",
+    "hulu",
+    "spotify",
+    "amazonprime",
+    "audible",
+    "siriusxm",
+    "planetfitness",
+    "apple",
+    "microsoft",
+    "adobe",
+    "norton",
+    "dropbox",
+    "evernote",
+    "sprint",
+    "tmobile",
+    "verizon",
+    "lemonadeinsurance",
+    "waterfordgroveapa",
+    "cleo",
+    "waterfordgrove",
+    "straighttalk",
+    "amazonprimevideo",
+}
+
+NON_RECURRING_VENDORS = {
+    "hogwartsbright",
+    "raviolicheo",
+    "chevron",
+    "walmart",
+    "target",
+    "starbucks",
+    "mcdonalds",
+    "uber",
+    "lyft",
+    "grubhub",
+    "bestbuy",
+    "homedepot",
+    "lowes",
+    "ticketmaster",
+    "amctheatres",
+    "vola",
+}
 
 
 def get_is_always_recurring(transaction: Transaction) -> bool:
@@ -25,6 +219,7 @@ def get_is_insurance(transaction: Transaction) -> bool:
     return bool(match)
 
 
+@safe_feature_bool
 def get_is_utility(transaction: Transaction) -> bool:
     """Check if the transaction is a utility payment."""
     # use a regular expression with boundaries to match case-insensitive utility
@@ -123,7 +318,8 @@ def get_transaction_z_score(transaction: Transaction, all_transactions: list[Tra
     # if the standard deviation is 0, return 0
     if np.std(all_amounts) == 0:
         return 0
-    return (transaction.amount - np.mean(all_amounts)) / np.std(all_amounts)  # type: ignore
+    # type: ignore
+    return float((transaction.amount - np.mean(all_amounts)) / np.std(all_amounts))
 
 
 def get_is_amazon_prime(transaction: Transaction) -> bool:
@@ -131,11 +327,246 @@ def get_is_amazon_prime(transaction: Transaction) -> bool:
     return "amazon prime" in transaction.name.lower()
 
 
-def get_new_features(transaction: Transaction, all_transactions: list[Transaction]) -> dict[str, int | bool | float]:  # noqa: ARG001
+@safe_feature_bool
+def get_is_known_recurring_vendor(transaction: Transaction) -> bool:
+    """Check if transaction is from a known recurring vendor with fuzzy matching."""
+    normalized = _normalize_name(transaction.name)
+    return normalized in RECURRING_VENDORS
+
+
+@safe_feature_bool
+def get_is_known_non_recurring_vendor(transaction: Transaction) -> bool:
+    """Check if transaction is from known non-recurring vendor."""
+    normalized = _normalize_name(transaction.name)
+    return normalized in NON_RECURRING_VENDORS
+
+
+@safe_feature_int
+def get_same_amount_count(merchant_trans: list[Transaction]) -> int:
+    """Count transactions with similar amounts (±1% tolerance)."""
+    if not merchant_trans:
+        return 0
+    ref_amount = Decimal(str(merchant_trans[0].amount))
+    return sum(
+        1
+        for t in merchant_trans
+        if abs(Decimal(str(t.amount)) - ref_amount) / (ref_amount + Decimal("1e-8")) <= Decimal("0.01")
+    )
+
+
+@safe_feature_bool
+def get_is_albert_99_recurring(transaction: Transaction) -> bool:
+    """Check for Albert recurring pattern."""
+    normalized_name = _normalize_name(transaction.name)
+    amount = Decimal(str(transaction.amount))
+    cents = amount % 1
+    return "albert" in normalized_name and abs(cents - Decimal("0.99")) < Decimal("0.001")
+
+
+@safe_feature
+def get_amount_consistency_score(
+    merchant_trans: list[Transaction], absolute_tol: float = 0.5, relative_tol: float = 0.05
+) -> float:
+    """Hybrid absolute/relative amount consistency score."""
+    amounts = [Decimal(str(t.amount)) for t in merchant_trans if t.amount > 0]
+    if len(amounts) < 2:
+        return 0.0
+
+    mean_amount = sum(amounts) / len(amounts)
+    if mean_amount == 0:
+        return 0.0
+
+    consistent = 0
+    for a in amounts:
+        abs_diff = abs(a - Decimal(mean_amount))
+        if abs_diff <= Decimal(str(absolute_tol)) or abs_diff / Decimal(mean_amount) <= Decimal(
+            str(relative_tol)
+        ):  # Absolute tolerance
+            consistent += 1
+
+    return consistent / len(amounts)
+
+
+@safe_feature
+def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_days: int = 10) -> float:
+    """Dynamic interval consistency using mode of observed intervals."""
+    intervals = _calc_intervals(merchant_trans)
+    if not intervals:
+        return 0.0
+
+    # Find most common interval
+    interval_counts: dict[int, int] = {}
+    for interval in intervals:
+        interval_counts[interval] += 1
+    # mode_interval = max(interval_counts, key=interval_counts.get, default=0)
+    mode_interval = max(interval_counts.keys(), key=lambda k: interval_counts[k], default=0)
+
+    # Score based on mode and common recurring intervals
+    consistent = 0
+    for i in intervals:
+        if abs(i - mode_interval) <= tolerance_days or any(
+            abs(i - target) <= tolerance_days for target in [45, 17, 380]
+        ):
+            consistent += 1
+
+    return consistent / len(intervals)
+
+
+@safe_feature
+def get_combined_recurrence_score(transaction: Transaction, merchant_trans: list[Transaction]) -> float:
+    """Enhanced combined score with balanced weights."""
+    vendor_score = 1.0 if get_is_known_recurring_vendor(transaction) else 0.0
+    non_recurring_vendor_score = 1.0 if get_is_known_non_recurring_vendor(transaction) else 0.0
+    amount_score = get_amount_consistency_score(merchant_trans)
+    interval_score = get_interval_consistency_score(merchant_trans)
+
+    # Balanced weights: reduce vendor score influence
+    # vendor, non-recurring vendor (negative), amount, interval
+    weights = [0.3, -0.3, 0.4, 0.3]
+    score = (
+        weights[0] * vendor_score
+        + weights[1] * non_recurring_vendor_score  # Subtract if non-recurring
+        + weights[2] * amount_score
+        + weights[3] * interval_score
+    )
+
+    # Normalize to [0, 1]
+    return max(0.0, min(1.0, score))
+
+
+@safe_feature_bool
+def get_is_recurring_same_amount_specific_intervals(merchant_trans: list[Transaction]) -> bool:
+    """Check if transactions have the same amount and specific intervals (27-45 days, 380 days, or 16 days)."""
+    if len(merchant_trans) < 2:
+        return False
+
+    # Check if amounts are the same (within $0.05 tolerance for floating-point precision)
+    amounts = [t.amount for t in merchant_trans if t.amount is not None]
+    if not amounts:
+        return False
+    reference_amount = amounts[0]
+    amounts_same = all(abs(amount - reference_amount) < 0.05 for amount in amounts)
+    if not amounts_same:
+        return False
+
+    # Calculate intervals between transactions
+    intervals = _calc_intervals(merchant_trans)
+    if not intervals:
+        return False
+
+    # Check if any interval matches the criteria: 27-45 days, 380 days, or 16 days (±1 day tolerance)
+    has_matching_interval = any(
+        (27 <= interval <= 45)  # Expanded to capture 30-day intervals
+        or (379 <= interval <= 381)  # 380 days ± 1
+        or (15 <= interval <= 17)  # 16 days ± 1
+        for interval in intervals
+    )
+
+    # Return True if both conditions are met
+    return amounts_same and has_matching_interval
+
+
+@safe_feature_int
+def detect_monthly_with_missing_entries(merchant_trans: list[Transaction]) -> int:
+    """
+    Detect monthly transactions (intervals ~1 month) that may have missing entries.
+    Returns 1 if likely a monthly recurring transaction, 0 otherwise.
+    """
+    try:
+        if len(merchant_trans) < 2:
+            return 0
+
+        # Calculate intervals in months
+        intervals = _calc_month_intervals(merchant_trans)
+        if not intervals:
+            return 0
+
+        # Check if intervals are approximately 1 month (±0.2 months)
+        monthly_intervals = all(0.8 <= interval <= 1.2 for interval in intervals)
+        if not monthly_intervals:
+            return 0
+
+        # Check for amount consistency (within 5% tolerance)
+        amounts = [t.amount for t in merchant_trans if t.amount is not None]
+        if not amounts:
+            return 0
+        mean_amt = sum(amounts) / len(amounts)
+        if mean_amt > 0:
+            max_amt = max(amounts)
+            min_amt = min(amounts)
+            if (max_amt - min_amt) / mean_amt > 0.05:
+                return 0
+
+        return 1  # Likely a monthly recurring transaction with possible missing entries
+    except Exception:
+        return 0
+
+
+@safe_feature
+def get_interval_cluster_score(merchant_trans: list[Transaction]) -> float:
+    """Calculate autocorrelation of intervals with common frequency ratios."""
+    intervals = _calc_intervals(merchant_trans)
+    if len(intervals) < 2:
+        return 0.0
+
+    # Build an array of UNIX timestamps
+    timestamps = []
+    for t in merchant_trans:
+        d = t.date
+
+    if isinstance(d, datetime):
+        dt = d
+    else:
+        dt = datetime.fromisoformat(d)
+        timestamps.append(int(dt.timestamp()))
+
+    ts = np.array(timestamps)
+
+    fft = np.fft.rfft(ts - ts.mean())
+    freqs = np.fft.rfftfreq(len(ts))
+
+    # Remove DC component and high frequencies
+    fft[0] = 0
+    fft[freqs > (1 / (24 * 3600))] = 0  # Ignore sub-daily frequencies
+
+    # Find strongest periodic component
+    dominant_freq = freqs[np.argmax(np.abs(fft))]
+    if dominant_freq == 0:
+        return 0.0
+
+    dominant_period = 1 / dominant_freq / (24 * 3600)  # Convert to days
+
+    # Score based on harmonic relationships
+    common_ratios = [1 / 7, 1 / 14, 1 / 30, 1 / 90, 1 / 180, 1 / 365]
+    ratio_scores = []
+    for ratio in common_ratios:
+        harmonic_diff = abs(dominant_period * ratio - 1)
+        ratio_scores.append(float(np.exp(-harmonic_diff * 10)))
+
+    return max(ratio_scores)
+
+
+def get_new_features(transaction: Transaction, all_transactions: list[Transaction]) -> dict[str, int | bool | float]:
     """Get the new features for the transaction."""
 
     # NOTE: Do NOT add features that are already in the original features.py file.
     # NOTE: Each feature should be on a separate line. Do not use **dict shorthand.
+    # Compute groups and amount counts internally
+    groups = _aggregate_transactions(all_transactions)
+    user_id, merchant_name = transaction.user_id, transaction.name
+    merchant_trans = groups.get(user_id, {}).get(merchant_name, [])
+    merchant_trans.sort(key=lambda x: x.date)
+
     return {
         "is_amazon_prime": get_is_amazon_prime(transaction),
+        "is_known_recurring_vendor": get_is_known_recurring_vendor(transaction),
+        "is_known_non_recurring_vendor": get_is_known_non_recurring_vendor(transaction),
+        "amount_consistency_score": get_amount_consistency_score(merchant_trans),
+        "interval_consistency_score": get_interval_consistency_score(merchant_trans),
+        "combined_recurrence_score": get_combined_recurrence_score(transaction, merchant_trans),
+        "same_amount_count": get_same_amount_count(merchant_trans),
+        "is_albert_99_recurring": get_is_albert_99_recurring(transaction),
+        "is_recurring_same_amount_specific_intervals": get_is_recurring_same_amount_specific_intervals(merchant_trans),
+        "interval_cluster_score": get_interval_cluster_score(merchant_trans),
+        "monthly_with_missing_entries": detect_monthly_with_missing_entries(merchant_trans),
     }

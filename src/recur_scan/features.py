@@ -302,6 +302,15 @@ from recur_scan.features_laurels import (
     time_since_last_transaction_same_merchant_feature,
     transaction_month_feature,
     transaction_pattern_complexity,
+    # enhanced_monthly_recurrence_score,
+    # adaptive_amount_variation_feature,
+    # temporal_pattern_entropy,
+    # merchant_category_signal,
+    # lifecycle_aware_feature,
+    # get_transaction_amount_variances,
+    # get_vendors_amount_variances,
+    # recurrence_interval_variances,
+    # get_interval_variance_coefficients,
 )
 from recur_scan.features_naomi import (
     get_cluster_label,
