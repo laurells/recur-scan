@@ -387,7 +387,7 @@ def test_detect_monthly_with_missing_entries() -> None:
         Transaction(id=3, user_id="user1", name="Netflix", amount=15.99, date="2023/03/01"),
     ]
     # Intervals: [1.0, 1.0], amounts consistent, score=1.0
-    assert pytest.approx(detect_monthly_with_missing_entries(trans1)) == 1.0
+    assert detect_monthly_with_missing_entries(trans1) == 1.0
 
     # Scenario 2: Missing monthly entry
     trans2 = [
@@ -395,7 +395,7 @@ def test_detect_monthly_with_missing_entries() -> None:
         Transaction(id=2, user_id="user1", name="Test", amount=10.00, date="2023/03/01"),
     ]
     # Intervals: [2.0], not approximately 1 month, score=0.0
-    assert pytest.approx(detect_monthly_with_missing_entries(trans2)) == 0.0
+    assert detect_monthly_with_missing_entries(trans2) == 0.0
 
     # Scenario 3: Inconsistent amounts
     trans3 = [
@@ -404,14 +404,14 @@ def test_detect_monthly_with_missing_entries() -> None:
         Transaction(id=3, user_id="user1", name="Utility", amount=60.00, date="2023/03/01"),
     ]
     # Intervals: [1.0, 1.0], but amounts vary too much (10/55 > 0.05), score=0.0
-    assert pytest.approx(detect_monthly_with_missing_entries(trans3)) == 0.0
+    assert detect_monthly_with_missing_entries(trans3) == 0.0
 
     # Scenario 4: Single transaction
     trans4 = [
         Transaction(id=1, user_id="user1", name="Single", amount=20.00, date="2023/01/01"),
     ]
     # Intervals: [], score=0.0
-    assert pytest.approx(detect_monthly_with_missing_entries(trans4)) == 0.0
+    assert detect_monthly_with_missing_entries(trans4) == 0.0
 
     # Scenario 5: Day differences in dates
     trans5 = [
@@ -420,4 +420,4 @@ def test_detect_monthly_with_missing_entries() -> None:
         Transaction(id=3, user_id="user1", name="Subscription", amount=30.00, date="2023/05/03"),
     ]
     # Intervals: [1 + 2/30, 1 + 2/30] ≈ [1.0667, 1.0667], within [0.8, 1.2], amounts consistent, score=1.0
-    assert pytest.approx(detect_monthly_with_missing_entries(trans5)) == 1.0
+    assert detect_monthly_with_missing_entries(trans5) == 1.0
