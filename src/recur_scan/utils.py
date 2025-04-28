@@ -1,10 +1,5 @@
-import math
-from collections.abc import Callable
 from datetime import date, datetime
-from functools import lru_cache, wraps
-from typing import Any, TypeVar, cast
-
-import numpy as np
+from functools import lru_cache
 
 
 @lru_cache(maxsize=1024)
@@ -18,89 +13,89 @@ def get_day(date: str) -> int:
     return int(date.split("-")[2])
 
 
-F = TypeVar("F", bound=Callable[..., float])
-B = TypeVar("B", bound=Callable[..., bool])
-IntCallable = TypeVar("IntCallable", bound=Callable[..., int])
+# F = TypeVar("F", bound=Callable[..., float])
+# B = TypeVar("B", bound=Callable[..., bool])
+# IntCallable = TypeVar("IntCallable", bound=Callable[..., int])
 
 
-def safe_feature(fn: F) -> F:
-    """
-    Decorator that:
-     - Catches exceptions and returns 0.0
-     - Converts infinities/NaNs to 0.0
-     - Clips any negative or zero values to 0.0
-    """
+# def safe_feature(fn: F) -> F:
+#     """
+#     Decorator that:
+#      - Catches exceptions and returns 0.0
+#      - Converts infinities/NaNs to 0.0
+#      - Clips any negative or zero values to 0.0
+#     """
 
-    @wraps(fn)
-    def float_wrapper(*args: Any, **kwargs: Any) -> float:
-        try:
-            val = fn(*args, **kwargs)
-        except Exception:
-            return 0.0
+#     @wraps(fn)
+#     def float_wrapper(*args: Any, **kwargs: Any) -> float:
+#         try:
+#             val = fn(*args, **kwargs)
+#         except Exception:
+#             return 0.0
 
-        # Convert non-numeric to 0
-        if not isinstance(val, int | float | np.floating | np.integer):
-            return 0.0
+#         # Convert non-numeric to 0
+#         if not isinstance(val, int | float | np.floating | np.integer):
+#             return 0.0
 
-        # Handle NaN or infinite
-        if isinstance(val, float | np.floating) and not math.isfinite(val):
-            return 0.0
+#         # Handle NaN or infinite
+#         if isinstance(val, float | np.floating) and not math.isfinite(val):
+#             return 0.0
 
-        # Enforce non-negativity
-        if val <= 0.0:
-            return 0.0
+#         # Enforce non-negativity
+#         if val <= 0.0:
+#             return 0.0
 
-        return float(val)
+#         return float(val)
 
-    return cast(F, float_wrapper)
-
-
-def safe_feature_bool(fn: B) -> B:
-    """
-    Decorator for boolean functions that:
-     - Catches exceptions and returns False
-     - Ensures the return value is a boolean
-    """
-
-    @wraps(fn)
-    def bool_wrapper(*args: Any, **kwargs: Any) -> bool:
-        try:
-            val = fn(*args, **kwargs)
-        except Exception:
-            return False
-
-        return bool(val)
-
-    return cast(B, bool_wrapper)
+#     return cast(F, float_wrapper)
 
 
-def safe_feature_int(fn: IntCallable) -> IntCallable:
-    """
-    Decorator for integer-returning functions that:
-     - Catches exceptions and returns 0
-     - Converts infinities/NaNs to 0
-     - Clips any negative or zero values to 0
-    """
+# def safe_feature_bool(fn: B) -> B:
+#     """
+#     Decorator for boolean functions that:
+#      - Catches exceptions and returns False
+#      - Ensures the return value is a boolean
+#     """
 
-    @wraps(fn)
-    def int_wrapper(*args: Any, **kwargs: Any) -> int:
-        try:
-            val = fn(*args, **kwargs)
-        except Exception:
-            return 0
+#     @wraps(fn)
+#     def bool_wrapper(*args: Any, **kwargs: Any) -> bool:
+#         try:
+#             val = fn(*args, **kwargs)
+#         except Exception:
+#             return False
 
-        # Convert non-numeric to 0
-        if not isinstance(val, int | float | np.floating | np.integer):
-            return 0
+#         return bool(val)
 
-        # Handle NaN or infinite
-        if isinstance(val, float | np.floating) and not math.isfinite(val):
-            return 0
+#     return cast(B, bool_wrapper)
 
-        # Enforce non-negativity
-        if val <= 0:
-            return 0
 
-        return int(val)
+# def safe_feature_int(fn: IntCallable) -> IntCallable:
+#     """
+#     Decorator for integer-returning functions that:
+#      - Catches exceptions and returns 0
+#      - Converts infinities/NaNs to 0
+#      - Clips any negative or zero values to 0
+#     """
 
-    return cast(IntCallable, int_wrapper)
+#     @wraps(fn)
+#     def int_wrapper(*args: Any, **kwargs: Any) -> int:
+#         try:
+#             val = fn(*args, **kwargs)
+#         except Exception:
+#             return 0
+
+#         # Convert non-numeric to 0
+#         if not isinstance(val, int | float | np.floating | np.integer):
+#             return 0
+
+#         # Handle NaN or infinite
+#         if isinstance(val, float | np.floating) and not math.isfinite(val):
+#             return 0
+
+#         # Enforce non-negativity
+#         if val <= 0:
+#             return 0
+
+#         return int(val)
+
+#     return cast(IntCallable, int_wrapper)

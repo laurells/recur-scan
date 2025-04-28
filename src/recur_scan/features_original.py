@@ -6,7 +6,7 @@ import numpy as np
 
 from recur_scan.features_laurels import _aggregate_transactions
 from recur_scan.transactions import Transaction
-from recur_scan.utils import get_day, parse_date, safe_feature, safe_feature_bool, safe_feature_int
+from recur_scan.utils import get_day, parse_date
 
 
 def _calc_intervals(transactions: list[Transaction]) -> list[int]:
@@ -93,7 +93,6 @@ def get_is_insurance(transaction: Transaction) -> bool:
     return bool(match)
 
 
-@safe_feature_bool
 def get_is_utility(transaction: Transaction) -> bool:
     """Check if the transaction is a utility payment."""
     # use a regular expression with boundaries to match case-insensitive utility
@@ -201,21 +200,18 @@ def get_is_amazon_prime(transaction: Transaction) -> bool:
     return "amazon prime" in transaction.name.lower()
 
 
-@safe_feature_bool
 def get_is_known_recurring_vendor(transaction: Transaction) -> bool:
     """Check if transaction is from a known recurring vendor with fuzzy matching."""
     normalized = _normalize_name(transaction.name)
     return normalized in RECURRING_VENDORS
 
 
-@safe_feature_bool
 def get_is_known_non_recurring_vendor(transaction: Transaction) -> bool:
     """Check if transaction is from known non-recurring vendor."""
     normalized = _normalize_name(transaction.name)
     return normalized in NON_RECURRING_VENDORS
 
 
-@safe_feature_int
 def get_same_amount_count(merchant_trans: list[Transaction]) -> int:
     """Count transactions with similar amounts (±1% tolerance)."""
     if not merchant_trans:
@@ -228,7 +224,6 @@ def get_same_amount_count(merchant_trans: list[Transaction]) -> int:
     )
 
 
-@safe_feature_bool
 def get_is_albert_99_recurring(transaction: Transaction) -> bool:
     """Check for Albert recurring pattern."""
     normalized_name = _normalize_name(transaction.name)
@@ -237,7 +232,6 @@ def get_is_albert_99_recurring(transaction: Transaction) -> bool:
     return "albert" in normalized_name and abs(cents - Decimal("0.99")) < Decimal("0.001")
 
 
-@safe_feature
 def get_amount_consistency_score(
     merchant_trans: list[Transaction],
     absolute_tol: float = 0.5,
@@ -259,7 +253,6 @@ def get_amount_consistency_score(
     return consistent / len(amounts)
 
 
-@safe_feature_int
 def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_days: int = 5) -> int:
     """Dynamic interval consistency using mode of observed intervals."""
     intervals = _calc_intervals(merchant_trans)
@@ -288,7 +281,6 @@ def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_
     return 1 if consistency_ratio == 1.0 else 0
 
 
-@safe_feature
 def get_interval_cluster_score(merchant_trans: list[Transaction]) -> float:
     """Calculate autocorrelation of intervals with common frequency ratios."""
     intervals = _calc_intervals(merchant_trans)
