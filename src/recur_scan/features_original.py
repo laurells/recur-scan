@@ -350,37 +350,6 @@ def get_is_recurring_same_amount_specific_intervals(merchant_trans: list[Transac
 
 
 @safe_feature
-def detect_monthly_with_missing_entries(merchant_trans: list[Transaction]) -> float:
-    try:
-        if len(merchant_trans) < 2:
-            return 0.0
-
-        intervals = _calc_month_intervals(merchant_trans)
-        if not intervals:
-            return 0.0
-
-        # Check if intervals are approximately 1 month (±0.2 months)
-        monthly_intervals = all(0.8 <= interval <= 1.2 for interval in intervals)
-        if not monthly_intervals:
-            return 0.0
-
-        # Check for amount consistency (within 5% tolerance)
-        amounts = [t.amount for t in merchant_trans if t.amount is not None]
-        if not amounts:
-            return 0.0
-        mean_amt = sum(amounts) / len(amounts)
-        if mean_amt > 0:
-            max_amt = max(amounts)
-            min_amt = min(amounts)
-            if (max_amt - min_amt) / mean_amt > 0.05:
-                return 0.0
-
-        return 1.0
-    except Exception:
-        return 0.0
-
-
-@safe_feature
 def get_interval_cluster_score(merchant_trans: list[Transaction]) -> float:
     """Calculate autocorrelation of intervals with common frequency ratios."""
     intervals = _calc_intervals(merchant_trans)
@@ -446,5 +415,4 @@ def get_new_features(transaction: Transaction, all_transactions: list[Transactio
         "is_albert_99_recurring": get_is_albert_99_recurring(transaction),
         "is_recurring_same_amount_specific_intervals": get_is_recurring_same_amount_specific_intervals(merchant_trans),
         "interval_cluster_score": get_interval_cluster_score(merchant_trans),
-        "monthly_with_missing_entries": detect_monthly_with_missing_entries(merchant_trans),
     }
