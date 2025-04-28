@@ -304,52 +304,6 @@ def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_
 
 
 @safe_feature
-def get_combined_recurrence_score(transaction: Transaction, merchant_trans: list[Transaction]) -> float:
-    """Enhanced combined score with balanced weights."""
-    vendor_score = 1.0 if get_is_known_recurring_vendor(transaction) else 0.0
-    non_recurring_vendor_score = 1.0 if get_is_known_non_recurring_vendor(transaction) else 0.0
-    amount_score = get_amount_consistency_score(merchant_trans)
-    interval_score = get_interval_consistency_score(merchant_trans)
-
-    weights = [0.0, 0.0, 0.4, 0.0]  # Adjusted to match test expectation
-    score = (
-        weights[0] * vendor_score
-        + weights[1] * non_recurring_vendor_score
-        + weights[2] * amount_score
-        + weights[3] * interval_score
-    )
-
-    return max(0.0, min(1.0, score))
-
-
-@safe_feature_bool
-def get_is_recurring_same_amount_specific_intervals(merchant_trans: list[Transaction]) -> bool:
-    if len(merchant_trans) < 2:
-        return False
-
-    amounts = [t.amount for t in merchant_trans if t.amount is not None]
-    if not amounts:
-        return False
-    reference_amount = amounts[0]
-    amounts_same = all(abs(amount - reference_amount) < 0.05 for amount in amounts)
-    if not amounts_same:
-        return False
-
-    intervals = _calc_intervals(merchant_trans)
-    if not intervals:
-        return False
-
-    has_matching_interval = any(
-        (27 <= interval <= 45)  # Expanded window for monthly cycles
-        or (379 <= interval <= 381)  # Yearly
-        or (15 <= interval <= 17)  # Biweekly
-        for interval in intervals
-    )
-
-    return has_matching_interval
-
-
-@safe_feature
 def get_interval_cluster_score(merchant_trans: list[Transaction]) -> float:
     """Calculate autocorrelation of intervals with common frequency ratios."""
     intervals = _calc_intervals(merchant_trans)
@@ -410,9 +364,7 @@ def get_new_features(transaction: Transaction, all_transactions: list[Transactio
         "is_known_non_recurring_vendor": get_is_known_non_recurring_vendor(transaction),
         "amount_consistency_score": get_amount_consistency_score(merchant_trans),
         "interval_consistency_score": get_interval_consistency_score(merchant_trans),
-        "combined_recurrence_score": get_combined_recurrence_score(transaction, merchant_trans),
         "same_amount_count": get_same_amount_count(merchant_trans),
         "is_albert_99_recurring": get_is_albert_99_recurring(transaction),
-        "is_recurring_same_amount_specific_intervals": get_is_recurring_same_amount_specific_intervals(merchant_trans),
         "interval_cluster_score": get_interval_cluster_score(merchant_trans),
     }

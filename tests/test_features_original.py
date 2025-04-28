@@ -4,7 +4,6 @@ import pytest
 
 from recur_scan.features_original import (
     get_amount_consistency_score,
-    get_combined_recurrence_score,
     get_ends_in_99,
     get_interval_consistency_score,
     get_is_albert_99_recurring,
@@ -14,7 +13,6 @@ from recur_scan.features_original import (
     get_is_known_non_recurring_vendor,
     get_is_known_recurring_vendor,
     get_is_phone,
-    get_is_recurring_same_amount_specific_intervals,
     get_is_utility,
     get_n_transactions_days_apart,
     get_n_transactions_same_amount,
@@ -290,88 +288,3 @@ def test_get_interval_consistency_score() -> None:
     ]
     # Intervals: [], score=0.0
     assert pytest.approx(get_interval_consistency_score(trans4)) == 0.0
-
-
-def test_get_combined_recurrence_score() -> None:
-    """Test get_combined_recurrence_score for various scenarios."""
-    # Scenario 1: Recurring vendor with consistent amounts and intervals
-    trans1 = [
-        Transaction(id=1, user_id="user1", name="Netflix", amount=15.99, date="01/01/2023"),
-        Transaction(id=2, user_id="user1", name="Netflix", amount=15.99, date="02/01/2023"),
-        Transaction(id=3, user_id="user1", name="Netflix", amount=15.99, date="03/01/2023"),
-    ]
-    # vendor_score=1.0, non_recurring_vendor_score=0.0, amount_score=1.0, interval_score=1.0
-    # score = 0.0 * 1.0 + 0.0 * 0.0 + 0.4 * 1.0 + 0.0 * 1.0 = 0.4
-    assert pytest.approx(get_combined_recurrence_score(trans1[0], trans1)) == 0.4
-
-    # Scenario 2: Non-recurring vendor with inconsistent amounts
-    trans2 = [
-        Transaction(id=1, user_id="user1", name="Walmart", amount=50.00, date="01/01/2023"),
-        Transaction(id=2, user_id="user1", name="Walmart", amount=60.00, date="01/10/2023"),
-        Transaction(id=3, user_id="user1", name="Walmart", amount=70.00, date="01/20/2023"),
-    ]
-    # vendor_score=0.0, non_recurring_vendor_score=1.0, amount_score=0.0, interval_score=0.0
-    # score = 0.0 * 0.0 + 0.0 * 1.0 + 0.4 * 0.0 + 0.0 * 0.0 = 0.0
-    assert pytest.approx(get_combined_recurrence_score(trans2[0], trans2)) == 0.0
-
-    # Scenario 3: Unknown vendor with consistent amounts but inconsistent intervals
-    trans3 = [
-        Transaction(id=1, user_id="user1", name="Unknown", amount=30.00, date="01/01/2023"),
-        Transaction(id=2, user_id="user1", name="Unknown", amount=30.00, date="01/10/2023"),
-        Transaction(id=3, user_id="user1", name="Unknown", amount=30.00, date="01/30/2023"),
-    ]
-    # vendor_score=0.0, non_recurring_vendor_score=0.0, amount_score=1.0, interval_score=0.0
-    # score = 0.0 * 0.0 + 0.0 * 0.0 + 0.4 * 1.0 + 0.0 * 0.0 = 0.4
-    assert pytest.approx(get_combined_recurrence_score(trans3[0], trans3)) == 0.4
-
-    # Scenario 4: Single transaction
-    trans4 = [
-        Transaction(id=1, user_id="user1", name="Netflix", amount=15.99, date="01/01/2023"),
-    ]
-    # vendor_score=1.0, non_recurring_vendor_score=0.0, amount_score=1.0, interval_score=0.0
-    # score = 0.0 * 1.0 + 0.0 * 0.0 + 0.4 * 1.0 + 0.0 * 0.0 = 0.4
-    assert pytest.approx(get_combined_recurrence_score(trans4[0], trans4)) == 0.4
-
-
-def test_get_is_recurring_same_amount_specific_intervals() -> None:
-    """Test get_is_recurring_same_amount_specific_intervals for various scenarios."""
-    # Scenario 1: Monthly recurring with same amount
-    trans1 = [
-        Transaction(id=1, user_id="user1", name="Netflix", amount=15.99, date="01/01/2023"),
-        Transaction(id=2, user_id="user1", name="Netflix", amount=15.99, date="02/01/2023"),
-        Transaction(id=3, user_id="user1", name="Netflix", amount=15.99, date="03/01/2023"),
-    ]
-    # Intervals: [31, 28], within [27, 45], amounts consistent, returns True
-    assert get_is_recurring_same_amount_specific_intervals(trans1) is True
-
-    # Scenario 2: Biweekly recurring with same amount
-    trans2 = [
-        Transaction(id=1, user_id="user1", name="Gym", amount=20.00, date="01/01/2023"),
-        Transaction(id=2, user_id="user1", name="Gym", amount=20.00, date="01/16/2023"),
-        Transaction(id=3, user_id="user1", name="Gym", amount=20.00, date="01/31/2023"),
-    ]
-    # Intervals: [15, 15], within [15, 17], amounts consistent, returns True
-    assert get_is_recurring_same_amount_specific_intervals(trans2) is True
-
-    # Scenario 3: Yearly recurring with same amount (current range fails)
-    trans3 = [
-        Transaction(id=1, user_id="user1", name="Membership", amount=100.00, date="01/01/2023"),
-        Transaction(id=2, user_id="user1", name="Membership", amount=100.00, date="01/01/2024"),
-    ]
-    # Intervals: [365], not within [379, 381], returns False
-    assert get_is_recurring_same_amount_specific_intervals(trans3) is False
-
-    # Scenario 4: Inconsistent amounts
-    trans4 = [
-        Transaction(id=1, user_id="user1", name="Utility", amount=50.00, date="01/01/2023"),
-        Transaction(id=2, user_id="user1", name="Utility", amount=51.00, date="02/01/2023"),
-    ]
-    # Intervals: [31], within [27, 45], but amounts differ by 1.00 > 0.05, returns False
-    assert get_is_recurring_same_amount_specific_intervals(trans4) is False
-
-    # Scenario 5: Single transaction
-    trans5 = [
-        Transaction(id=1, user_id="user1", name="Single", amount=20.00, date="01/01/2023"),
-    ]
-    # Intervals: [], returns False
-    assert get_is_recurring_same_amount_specific_intervals(trans5) is False
