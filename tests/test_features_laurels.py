@@ -7,6 +7,13 @@ from recur_scan.features_laurels import (
     date_irregularity_dominance,
     day_consistency_score_feature,
     day_of_week_feature,
+    get_amount_consistency_score,
+    get_interval_cluster_score,
+    get_interval_consistency_score,
+    get_is_albert_99_recurring,
+    get_is_known_non_recurring_vendor,
+    get_is_known_recurring_vendor,
+    get_same_amount_count,
     identical_transaction_ratio_feature,
     interval_variability_feature,
     is_deposit_feature,
@@ -321,3 +328,115 @@ def test_date_irregularity_dominance():
     irr_score = date_irregularity_dominance(irregular_txs, irr_stats, irr_amount_stats)
     assert rec_score < 0.3
     assert irr_score > 0.49  # Fixed: 0.4977 > 0.49, not 0.6
+
+
+def test_get_is_known_recurring_vendor() -> None:
+    """Test get_is_known_recurring_vendor."""
+    trans1 = Transaction(id=1, user_id="user1", name="Netflix", amount=15.99, date="01/01/2023")
+    trans2 = Transaction(id=2, user_id="user1", name="Walmart", amount=50.00, date="01/01/2023")
+    trans3 = Transaction(id=3, user_id="user1", name="NETFLIX", amount=15.99, date="01/01/2023")
+    assert get_is_known_recurring_vendor(trans1) is True
+    assert get_is_known_recurring_vendor(trans2) is False
+    assert get_is_known_recurring_vendor(trans3) is True
+
+
+def test_get_is_known_non_recurring_vendor() -> None:
+    """Test get_is_known_non_recurring_vendor."""
+    trans1 = Transaction(id=1, user_id="user1", name="Walmart", amount=50.00, date="01/01/2023")
+    trans2 = Transaction(id=2, user_id="user1", name="Netflix", amount=15.99, date="01/01/2023")
+    trans3 = Transaction(id=3, user_id="user1", name="Star Bucks", amount=5.00, date="01/01/2023")
+    assert get_is_known_non_recurring_vendor(trans1) is True
+    assert get_is_known_non_recurring_vendor(trans2) is False
+    assert get_is_known_non_recurring_vendor(trans3) is True
+
+
+def test_get_same_amount_count() -> None:
+    """Test get_same_amount_count."""
+    trans1 = [
+        Transaction(id=1, user_id="user1", name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(id=2, user_id="user1", name="Test", amount=10.00, date="02/01/2023"),
+        Transaction(id=3, user_id="user1", name="Test", amount=10.00, date="03/01/2023"),
+    ]
+    trans2 = [
+        Transaction(id=1, user_id="user1", name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(id=2, user_id="user1", name="Test", amount=10.09, date="02/01/2023"),
+        Transaction(id=3, user_id="user1", name="Test", amount=9.91, date="03/01/2023"),
+    ]
+    trans3 = [
+        Transaction(id=1, user_id="user1", name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(id=2, user_id="user1", name="Test", amount=11.00, date="02/01/2023"),
+    ]
+    assert get_same_amount_count(trans1) == 3
+    assert get_same_amount_count(trans2) == 3
+    assert get_same_amount_count(trans3) == 1
+    assert get_same_amount_count([]) == 0
+
+
+def test_get_is_albert_99_recurring() -> None:
+    """Test get_is_albert_99_recurring."""
+    trans1 = Transaction(id=1, user_id="user1", name="ALBERT", amount=1.99, date="01/01/2023")
+    trans2 = Transaction(id=2, user_id="user1", name="ALBERT", amount=1.50, date="01/01/2023")
+    trans3 = Transaction(id=3, user_id="user1", name="Netflix", amount=1.99, date="01/01/2023")
+    trans4 = Transaction(id=4, user_id="user1", name="ALBERT", amount=1.99, date="01/01/2023")
+    assert get_is_albert_99_recurring(trans1) is True
+    assert get_is_albert_99_recurring(trans2) is False
+    assert get_is_albert_99_recurring(trans3) is False
+    assert get_is_albert_99_recurring(trans4) is True
+
+
+def test_get_amount_consistency_score() -> None:
+    """Test get_amount_consistency_score."""
+    trans1 = [
+        Transaction(id=1, user_id="user1", name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(id=2, user_id="user1", name="Test", amount=10.00, date="02/01/2023"),
+        Transaction(id=3, user_id="user1", name="Test", amount=10.00, date="03/01/2023"),
+    ]
+    trans2 = [
+        Transaction(id=1, user_id="user1", name="Test", amount=10.00, date="01/01/2023"),
+        Transaction(id=2, user_id="user1", name="Test", amount=10.40, date="02/01/2023"),
+        Transaction(id=3, user_id="user1", name="Test", amount=10.30, date="03/01/2023"),
+    ]
+    trans3 = [
+        Transaction(id=1, user_id="user1", name="Test", amount=50.00, date="01/01/2023"),
+        Transaction(id=2, user_id="user1", name="Test", amount=55.00, date="02/01/2023"),
+        Transaction(id=3, user_id="user1", name="Test", amount=60.00, date="03/01/2023"),
+    ]
+    trans4 = [
+        Transaction(id=1, user_id="user1", name="Test", amount=0.00, date="01/01/2023"),
+        Transaction(id=2, user_id="user1", name="Test", amount=0.00, date="02/01/2023"),
+    ]
+    assert get_amount_consistency_score(trans1) == 1.0
+    assert get_amount_consistency_score(trans2) == 1.0
+    assert get_amount_consistency_score(trans3) == 1.0 / 3.0
+    assert get_amount_consistency_score(trans4) == 0.0
+
+
+def test_get_interval_consistency_score() -> None:
+    """Test get_interval_consistency_score for various scenarios."""
+    # Scenario 1: Consistent monthly intervals
+    trans1 = [
+        Transaction(id=1, user_id="user1", name="Netflix", amount=15.99, date="2023/03/01"),
+        Transaction(id=2, user_id="user1", name="Netflix", amount=15.99, date="2023/04/02"),
+        Transaction(id=3, user_id="user1", name="Netflix", amount=15.99, date="2023/05/03"),
+    ]
+    # Intervals: [32, 31], mode=32, both intervals within tolerance of mode, returns 1
+    assert get_interval_consistency_score(trans1) == 1
+
+    # Scenario 2: Inconsistent intervals
+    trans2 = [
+        Transaction(id=1, user_id="user1", name="Test", amount=10.00, date="2023/03/01"),
+        Transaction(id=2, user_id="user1", name="Test", amount=10.00, date="2023/03/10"),
+        Transaction(id=3, user_id="user1", name="Test", amount=10.00, date="2023/03/30"),
+    ]
+    # Intervals: [9, 20], mode=20, not close to trusted targets, returns 0
+    assert get_interval_consistency_score(trans2) == 0
+
+
+def test_get_interval_cluster_score() -> None:
+    """Test get_interval_cluster_score for various scenarios."""
+    trans3 = [
+        Transaction(id=1, user_id="user1", name="Single", amount=20.00, date="2023/01/01"),
+        Transaction(id=2, user_id="user1", name="Single", amount=20.00, date="2023/02/01"),
+    ]
+    # Intervals: [31], fewer than 2 intervals, returns 0.0
+    assert pytest.approx(get_interval_cluster_score(trans3)) == 0.0

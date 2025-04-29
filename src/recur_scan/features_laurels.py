@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 
 import numpy as np
 from scipy.stats import entropy
@@ -446,3 +447,217 @@ def date_irregularity_dominance(
             1.0,
         )
     )
+
+
+# helper methods
+
+
+def _calc_intervals(transactions: list[Transaction]) -> list[int]:
+    sorted_trans = sorted(transactions, key=lambda t: t.date)
+    intervals = []
+
+    for i in range(1, len(sorted_trans)):
+        # Explicitly parse dates with YYYY/MM/DD format
+        prev_date = datetime.strptime(sorted_trans[i - 1].date, "%Y/%m/%d")
+        curr_date = datetime.strptime(sorted_trans[i].date, "%Y/%m/%d")
+        delta = curr_date - prev_date
+        intervals.append(abs(delta.days))  # Ensure positive intervals
+
+    return intervals
+
+
+def _normalize_name(name: str) -> str:
+    """Normalize vendor names for consistent matching."""
+    return name.strip().lower().replace(" ", "").replace("-", "").replace("_", "")
+
+
+# --- Vendor Classification ---
+RECURRING_VENDORS = {
+    "netflix",
+    "hulu",
+    "spotify",
+    "amazonprime",
+    "audible",
+    "siriusxm",
+    "planetfitness",
+    "apple",
+    "microsoft",
+    "adobe",
+    "norton",
+    "dropbox",
+    "evernote",
+    "sprint",
+    "tmobile",
+    "verizon",
+    "lemonadeinsurance",
+    "waterfordgroveapa",
+    "cleo",
+    "waterfordgrove",
+    "straighttalk",
+    "amazonprimevideo",
+}
+
+NON_RECURRING_VENDORS = {
+    "hogwartsbright",
+    "raviolicheo",
+    "chevron",
+    "walmart",
+    "target",
+    "starbucks",
+    "mcdonalds",
+    "uber",
+    "lyft",
+    "grubhub",
+    "bestbuy",
+    "homedepot",
+    "lowes",
+    "ticketmaster",
+    "amctheatres",
+    "vola",
+}
+
+
+def get_is_known_recurring_vendor(transaction: Transaction) -> bool:
+    """Check if transaction is from a known recurring vendor with fuzzy matching."""
+    normalized = _normalize_name(transaction.name)
+    return normalized in RECURRING_VENDORS
+
+
+def get_is_known_non_recurring_vendor(transaction: Transaction) -> bool:
+    """Check if transaction is from known non-recurring vendor."""
+    normalized = _normalize_name(transaction.name)
+    return normalized in NON_RECURRING_VENDORS
+
+
+def get_same_amount_count(merchant_trans: list[Transaction]) -> int:
+    """Count transactions with similar amounts (±1% tolerance)."""
+    if not merchant_trans:
+        return 0
+    ref_amount = Decimal(str(merchant_trans[0].amount))
+    return sum(
+        1
+        for t in merchant_trans
+        if abs(Decimal(str(t.amount)) - ref_amount) / (ref_amount + Decimal("1e-8")) <= Decimal("0.01")
+    )
+
+
+def get_is_albert_99_recurring(transaction: Transaction) -> bool:
+    """Check for Albert recurring pattern."""
+    normalized_name = _normalize_name(transaction.name)
+    amount = Decimal(str(transaction.amount))
+    cents = amount % 1
+    return "albert" in normalized_name and abs(cents - Decimal("0.99")) < Decimal("0.001")
+
+
+def get_amount_consistency_score(
+    merchant_trans: list[Transaction],
+    absolute_tol: float = 0.5,
+    relative_tol: float = 0.05,
+) -> float:
+    """
+    Hybrid score: returns fraction of amounts consistent.
+    """
+    amounts = [Decimal(str(t.amount)) for t in merchant_trans if t.amount > 0]
+    if len(amounts) < 2:
+        return 0.0
+    mean_amount = sum(amounts) / len(amounts)
+    mean_amt = Decimal(mean_amount)
+    consistent = 0
+    for a in amounts:
+        diff = abs(a - mean_amt)
+        if diff <= Decimal(str(absolute_tol)) or diff / mean_amt <= Decimal(str(relative_tol)):
+            consistent += 1
+    return consistent / len(amounts)
+
+
+def get_interval_consistency_score(merchant_trans: list[Transaction], tolerance_days: int = 5) -> int:
+    """Dynamic interval consistency using mode of observed intervals."""
+    intervals = _calc_intervals(merchant_trans)
+    if not intervals:
+        return 0
+
+    # Find the mode interval
+    interval_counts: dict[int, int] = {}
+    for interval in intervals:
+        interval_counts[interval] = interval_counts.get(interval, 0) + 1
+    mode_interval = max(interval_counts.keys(), key=lambda k: interval_counts[k], default=0)
+
+    # Check if the mode is close to a trusted target
+    trusted_targets = [7, 14, 17, 28, 30, 31, 45, 60, 90, 180, 365, 380]
+    if not any(abs(mode_interval - target) <= tolerance_days for target in trusted_targets):
+        return 0
+
+    # Check if intervals are close to the mode
+    consistent = 0
+    for i in intervals:
+        if abs(i - mode_interval) <= tolerance_days:
+            consistent += 1
+
+    # Return 1 if all intervals are consistent, 0 otherwise
+    consistency_ratio = consistent / len(intervals)
+    return 1 if consistency_ratio == 1.0 else 0
+
+
+def get_interval_cluster_score(merchant_trans: list[Transaction]) -> float:
+    """Calculate autocorrelation of intervals with common frequency ratios."""
+    intervals = _calc_intervals(merchant_trans)
+    if len(intervals) < 2:
+        return 0.0
+
+    # Build an array of UNIX timestamps
+    timestamps = []
+    for t in merchant_trans:
+        d = t.date
+
+    if isinstance(d, datetime):
+        dt = d
+    else:
+        dt = datetime.fromisoformat(d)
+        timestamps.append(int(dt.timestamp()))
+
+    ts = np.array(timestamps)
+
+    fft = np.fft.rfft(ts - ts.mean())
+    freqs = np.fft.rfftfreq(len(ts))
+
+    # Remove DC component and high frequencies
+    fft[0] = 0
+    fft[freqs > (1 / (24 * 3600))] = 0  # Ignore sub-daily frequencies
+
+    # Find strongest periodic component
+    dominant_freq = freqs[np.argmax(np.abs(fft))]
+    if dominant_freq == 0:
+        return 0.0
+
+    dominant_period = 1 / dominant_freq / (24 * 3600)  # Convert to days
+
+    # Score based on harmonic relationships
+    common_ratios = [1 / 7, 1 / 14, 1 / 30, 1 / 90, 1 / 180, 1 / 365]
+    ratio_scores = []
+    for ratio in common_ratios:
+        harmonic_diff = abs(dominant_period * ratio - 1)
+        ratio_scores.append(float(np.exp(-harmonic_diff * 10)))
+
+    return max(ratio_scores)
+
+
+def get_new_features(transaction: Transaction, all_transactions: list[Transaction]) -> dict[str, int | bool | float]:
+    """Get the new features for the transaction."""
+
+    # NOTE: Do NOT add features that are already in the original features.py file.
+    # NOTE: Each feature should be on a separate line. Do not use **dict shorthand.
+    # Compute groups and amount counts internally
+    groups = _aggregate_transactions(all_transactions)
+    user_id, merchant_name = transaction.user_id, transaction.name
+    merchant_trans = groups.get(user_id, {}).get(merchant_name, [])
+    merchant_trans.sort(key=lambda x: x.date)
+
+    return {
+        "is_known_recurring_vendor": get_is_known_recurring_vendor(transaction),
+        "is_known_non_recurring_vendor": get_is_known_non_recurring_vendor(transaction),
+        "amount_consistency_score": get_amount_consistency_score(merchant_trans),
+        "interval_consistency_score": get_interval_consistency_score(merchant_trans),
+        "same_amount_count": get_same_amount_count(merchant_trans),
+        "is_albert_99_recurring": get_is_albert_99_recurring(transaction),
+        "interval_cluster_score": get_interval_cluster_score(merchant_trans),
+    }
